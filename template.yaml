@@ -24,7 +24,7 @@ Parameters:
 
 Resources:
 
-  # ── API Gateway ────────────────────────────────────────────
+  #  API Gateway 
   TruthLensApi:
     Type: AWS::Serverless::Api
     Properties:
@@ -35,7 +35,7 @@ Resources:
         AllowHeaders: "'Content-Type'"
         AllowOrigin: "'*'"
 
-  # ── Lambda: analyze ────────────────────────────────────────
+  #  Lambda: analyze 
   AnalyzeFunction:
     Type: AWS::Serverless::Function
     Properties:

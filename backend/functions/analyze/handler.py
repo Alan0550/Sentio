@@ -40,7 +40,7 @@ def lambda_handler(event, context):
 
     input_type = "url" if _is_url(user_input) else "text"
 
-    # ── ANÁLISIS SIMULADO ─────────────────────────────────────
+    # ANÁLISIS SIMULADO 
     # Esta función será reemplazada por llamadas reales a
     # Comprehend, Rekognition y Bedrock en futuras iteraciones.
     result = _mock_analysis(user_input, input_type)
