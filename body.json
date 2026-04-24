@@ -1,0 +1,10 @@
+{
+  "anthropic_version": "bedrock-2023-05-31",
+  "max_tokens": 500,
+  "messages": [
+    {
+      "role": "user",
+      "content": "Analiza esta noticia y dime si parece confiable o falsa: 'El gobierno confirmó hoy un aumento del 10% en el salario mínimo según informó el Ministerio de Trabajo.'"
+    }
+  ]
+}

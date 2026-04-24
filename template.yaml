@@ -5,7 +5,7 @@ Description: TruthLens - API de análisis de credibilidad de noticias
 Globals:
   Function:
     Runtime: python3.12
-    Timeout: 30
+    Timeout: 45    # Bedrock(25s) + Comprehend(~5s) + scraping(~10s) + margen
     MemorySize: 256
     Environment:
       Variables:
@@ -21,6 +21,11 @@ Parameters:
     Type: String
     Default: dev
     AllowedValues: [dev, prod]
+  BraveApiKey:
+    Type: String
+    Default: ""
+    NoEcho: true
+    Description: API key de Brave Search (opcional — el sistema funciona sin ella)
 
 Resources:
 
@@ -35,7 +40,24 @@ Resources:
         AllowHeaders: "'Content-Type'"
         AllowOrigin: "'*'"
 
-  #  Lambda: analyze 
+  #  DynamoDB: historial de análisis
+  AnalysisTable:
+    Type: AWS::DynamoDB::Table
+    Properties:
+      TableName: !Sub truthlens-analysis-${Stage}
+      BillingMode: PAY_PER_REQUEST
+      AttributeDefinitions:
+        - AttributeName: id
+          AttributeType: S
+        - AttributeName: timestamp
+          AttributeType: S
+      KeySchema:
+        - AttributeName: id
+          KeyType: HASH
+        - AttributeName: timestamp
+          KeyType: RANGE
+
+  #  Lambda: analyze
   AnalyzeFunction:
     Type: AWS::Serverless::Function
     Properties:
@@ -45,6 +67,31 @@ Resources:
       Description: Recibe texto o URL y devuelve score de credibilidad
       Policies:
         - AWSLambdaBasicExecutionRole
+        - Statement:
+            - Effect: Allow
+              Action:
+                - comprehend:DetectSentiment
+                - comprehend:DetectEntities
+              Resource: "*"
+            - Effect: Allow
+              Action:
+                - bedrock:InvokeModel
+              Resource: "*"
+            - Effect: Allow
+              Action:
+                - rekognition:DetectModerationLabels
+                - rekognition:DetectText
+              Resource: "*"
+            - Effect: Allow
+              Action:
+                - dynamodb:PutItem
+                - dynamodb:Query
+                - dynamodb:Scan
+              Resource: !GetAtt AnalysisTable.Arn
+      Environment:
+        Variables:
+          TABLE_NAME:    !Ref AnalysisTable
+          BRAVE_API_KEY: !Ref BraveApiKey
       Events:
         AnalyzePost:
           Type: Api
@@ -52,6 +99,12 @@ Resources:
             RestApiId: !Ref TruthLensApi
             Path: /analyze
             Method: POST
+        HistoryGet:
+          Type: Api
+          Properties:
+            RestApiId: !Ref TruthLensApi
+            Path: /history
+            Method: GET
 
 Outputs:
   ApiUrl:

@@ -1,5 +1,8 @@
-# Dependencias actuales: ninguna (solo stdlib de Python)
-# Se agregarán conforme se integren servicios AWS:
-# boto3        → Comprehend, Rekognition, Bedrock, DynamoDB
-# beautifulsoup4 → scraping de URLs
-# requests       → HTTP requests desde el scraper
+# boto3 ya viene incluido en el runtime de Lambda — no es necesario declararlo.
+# Se declara aquí solo para desarrollo local con sam local.
+
+boto3==1.38.0
+
+# Para cuando se integren los servicios (descomentar según avance):
+# beautifulsoup4==4.12.3   → scraping de URLs más robusto
+# requests==2.32.3         → HTTP requests desde el scraper

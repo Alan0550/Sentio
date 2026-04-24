@@ -1,0 +1,10 @@
+{
+  "permissions": {
+    "allow": [
+      "Bash(aws s3 *)",
+      "Bash(aws s3api put-bucket-policy --bucket truthlens-frontend-dev --policy '{ *)",
+      "Bash(aws s3api *)",
+      "Bash(aws cloudfront create-distribution --distribution-config '{ *)"
+    ]
+  }
+}
