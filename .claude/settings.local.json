@@ -17,7 +17,18 @@
       "Bash(curl -s http://localhost:3000)",
       "Bash(/c/Users/Alan/AppData/Local/Programs/Python/Python312/python.exe -c \"import handler; print\\('handler.py OK'\\)\")",
       "Bash(curl -s -o /dev/null -w \"%{http_code}\" -X OPTIONS \"https://c973n26u42.execute-api.us-east-1.amazonaws.com/dev/analyze\" -H \"Origin: http://localhost:3000\")",
-      "Bash(curl -s -X POST https://c973n26u42.execute-api.us-east-1.amazonaws.com/dev/analyze -H 'Content-Type: application/json' -d '{\"input\": \"El servicio es pésimo, nunca más vuelvo.\"}')"
+      "Bash(curl -s -X POST https://c973n26u42.execute-api.us-east-1.amazonaws.com/dev/analyze -H 'Content-Type: application/json' -d '{\"input\": \"El servicio es pésimo, nunca más vuelvo.\"}')",
+      "Bash(/c/Users/Alan/AppData/Local/Programs/Python/Python312/python.exe -c ' *)",
+      "Bash(curl -s -o /dev/null -w \"%{http_code}\" -X OPTIONS \"https://7disp2jawi.execute-api.us-east-1.amazonaws.com/dev/upload/csv\")",
+      "Bash(curl -s -X POST \"https://7disp2jawi.execute-api.us-east-1.amazonaws.com/dev/upload/csv\" -H \"Content-Type: application/json\" -d \"{}\")",
+      "Bash(/c/Users/Alan/AppData/Local/Programs/Python/Python312/python.exe -c \"import handler; print\\('OK'\\)\")",
+      "Bash(curl -s -w '\\\\nHTTP_STATUS:%{http_code}' -X POST https://7disp2jawi.execute-api.us-east-1.amazonaws.com/dev/upload/csv -F 'file=@/c/Users/Alan/Documents/Proyectos/sentio/frontend/src/components/CsvUploader.jsx;type=text/csv' -F org_id=test)",
+      "Bash(curl -s -v -X OPTIONS https://7disp2jawi.execute-api.us-east-1.amazonaws.com/dev/upload/csv -H 'Origin: https://dbqzapx3jb9ey.cloudfront.net' -H 'Access-Control-Request-Method: POST' -H 'Access-Control-Request-Headers: content-type')",
+      "Bash(curl -s -w \"\\\\nHTTP:%{http_code}\" \"https://7disp2jawi.execute-api.us-east-1.amazonaws.com/dev/history\")",
+      "Bash(curl -s \"https://7disp2jawi.execute-api.us-east-1.amazonaws.com/dev/history\")",
+      "Bash(curl -s -X POST https://7disp2jawi.execute-api.us-east-1.amazonaws.com/dev/analyze -H 'Content-Type: application/json' -d '{\"input\":\"Pesimo servicio nunca mas vuelvo a esta empresa\"}')",
+      "Bash(aws lambda *)",
+      "Read(//tmp/**)"
     ]
   }
 }

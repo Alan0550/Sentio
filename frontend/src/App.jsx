@@ -3,14 +3,17 @@ import Header from './components/Header'
 import FeedbackForm from './components/FeedbackForm'
 import AnalysisResult from './components/AnalysisResult'
 import Dashboard from './components/Dashboard'
+import CsvUploader from './components/CsvUploader'
+import BatchResult from './components/BatchResult'
 import { analyzeFeedback } from './services/api'
 
 export default function App() {
-  const [view, setView]           = useState('analyzer')
-  const [loading, setLoading]     = useState(false)
-  const [result, setResult]       = useState(null)
-  const [error, setError]         = useState(null)
-  const [inputText, setInputText] = useState('')
+  const [view, setView]             = useState('analyzer')
+  const [loading, setLoading]       = useState(false)
+  const [result, setResult]         = useState(null)
+  const [error, setError]           = useState(null)
+  const [inputText, setInputText]   = useState('')
+  const [batchResult, setBatchResult] = useState(null)
 
   async function handleAnalyze(formData) {
     setLoading(true)
@@ -33,14 +36,43 @@ export default function App() {
     setInputText('')
   }
 
+  function handleCsvResult(data) {
+    setBatchResult(data)
+    setView('csv-result')
+  }
+
+  function handleCsvReset() {
+    setBatchResult(null)
+    setView('csv')
+  }
+
+  function handleChangeView(v) {
+    setView(v)
+    if (v === 'analyzer') handleReset()
+    if (v === 'csv' && view === 'csv-result') setBatchResult(null)
+  }
+
   return (
     <div className="min-h-screen" style={{ backgroundColor: '#F8FAFC' }}>
-      <Header view={view} onChangeView={setView} />
+      <Header view={view} onChangeView={handleChangeView} />
 
       <main className="max-w-4xl mx-auto px-4 py-8">
-        {view === 'dashboard' ? (
-          <Dashboard />
-        ) : (
+
+        {view === 'dashboard' && <Dashboard />}
+
+        {view === 'csv' && (
+          <CsvUploader onResult={handleCsvResult} />
+        )}
+
+        {view === 'csv-result' && batchResult && (
+          <BatchResult
+            result={batchResult}
+            onReset={handleCsvReset}
+            onGoToDashboard={() => handleChangeView('dashboard')}
+          />
+        )}
+
+        {view === 'analyzer' && (
           <>
             {!result && !loading && (
               <FeedbackForm onSubmit={handleAnalyze} error={error} />
@@ -61,6 +93,7 @@ export default function App() {
             )}
           </>
         )}
+
       </main>
     </div>
   )

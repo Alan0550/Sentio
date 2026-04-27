@@ -90,3 +90,49 @@ def get_recent(limit: int = 20, org_id: str = None) -> list:
     except (BotoCoreError, ClientError) as e:
         print(f"[history] Error al consultar DynamoDB: {e}")
         return []
+
+
+def save_batch_summary(batch_id: str, org_id: str, summary_data: dict) -> str:
+    """Guarda el resumen de un batch como ítem separado en DynamoDB."""
+    timestamp = datetime.now(timezone.utc).isoformat()
+    item = {
+        "id":        batch_id,
+        "timestamp": timestamp,
+        "type":      "batch_summary",
+        "org_id":    org_id,
+        "total":     summary_data.get("total", 0),
+        "processed": summary_data.get("processed", 0),
+        "failed":    summary_data.get("failed", 0),
+        "summary":   json.dumps(summary_data.get("summary", {}), ensure_ascii=False),
+        "status":    "completed",
+    }
+    try:
+        _table.put_item(Item=item)
+        print(f"[history] Batch summary guardado — batch_id={batch_id} org={org_id}")
+    except (BotoCoreError, ClientError) as e:
+        print(f"[history] Error al guardar batch summary: {e}")
+    return batch_id
+
+
+def get_batch_summary(batch_id: str) -> dict | None:
+    """Recupera el resumen de un batch. Retorna None si no existe."""
+    try:
+        response = _table.scan(
+            FilterExpression=(
+                boto3.dynamodb.conditions.Attr("id").eq(batch_id) &
+                boto3.dynamodb.conditions.Attr("type").eq("batch_summary")
+            )
+        )
+        items = response.get("Items", [])
+        if not items:
+            return None
+        item = items[0]
+        if isinstance(item.get("summary"), str):
+            try:
+                item["summary"] = json.loads(item["summary"])
+            except (json.JSONDecodeError, TypeError):
+                item["summary"] = {}
+        return item
+    except (BotoCoreError, ClientError) as e:
+        print(f"[history] Error al consultar batch summary: {e}")
+        return None

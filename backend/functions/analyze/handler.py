@@ -7,16 +7,29 @@ aspectos por sentimiento y riesgo de churn.
 import json
 import time
 import uuid
+import base64
+from decimal import Decimal
 
-from services.text_analyzer import analyze_text
-from services.score_engine  import analyze_feedback
-from services.history       import save_analysis, get_recent
+class _JSONEncoder(json.JSONEncoder):
+    def default(self, obj):
+        if isinstance(obj, Decimal):
+            return int(obj) if obj % 1 == 0 else float(obj)
+        return super().default(obj)
+
+def _dumps(obj, **_):
+    return json.dumps(obj, ensure_ascii=False, cls=_JSONEncoder)
+
+from services.text_analyzer  import analyze_text
+from services.score_engine   import analyze_feedback
+from services.history        import save_analysis, get_recent, get_batch_summary
+from services.csv_processor  import parse_csv
+from services.batch_processor import process_batch
 
 
 HEADERS = {
     "Content-Type":                 "application/json",
     "Access-Control-Allow-Origin":  "*",
-    "Access-Control-Allow-Headers": "Content-Type",
+    "Access-Control-Allow-Headers": "Content-Type,Content-Type",
     "Access-Control-Allow-Methods": "POST,GET,OPTIONS",
 }
 
@@ -34,8 +47,17 @@ def lambda_handler(event, context):
     if path == "/analyze/batch" and method == "POST":
         return _handle_batch(event)
 
+    if path == "/upload/csv" and method == "POST":
+        return _handle_upload_csv(event)
+
+    if path.startswith("/batch/") and method == "GET":
+        batch_id = event.get("pathParameters", {}).get("batch_id") or path.split("/batch/")[-1]
+        return _handle_get_batch(batch_id)
+
     return _handle_analyze(event)
 
+
+# ── Endpoints existentes ──────────────────────────────────────────────────────
 
 def _handle_analyze(event):
     try:
@@ -68,7 +90,7 @@ def _handle_analyze(event):
     return {
         "statusCode": 200,
         "headers":    HEADERS,
-        "body":       json.dumps(result, ensure_ascii=False),
+        "body":       _dumps(result, ensure_ascii=False),
     }
 
 
@@ -78,9 +100,9 @@ def _handle_batch(event):
     except json.JSONDecodeError:
         return _error(400, "Body inválido. Se esperaba JSON.")
 
-    feedbacks   = body.get("feedbacks", [])
-    org_id      = body.get("org_id", "default")
-    source      = body.get("source", "batch")
+    feedbacks = body.get("feedbacks", [])
+    org_id    = body.get("org_id", "default")
+    source    = body.get("source", "batch")
 
     if not isinstance(feedbacks, list) or len(feedbacks) == 0:
         return _error(400, "El campo 'feedbacks' debe ser una lista no vacía.")
@@ -90,12 +112,7 @@ def _handle_batch(event):
     batch_id = str(uuid.uuid4())
     results  = []
     failed   = 0
-
-    promoters   = 0
-    passives    = 0
-    detractors  = 0
-    high_churn  = 0
-    urgent      = 0
+    promoters = passives = detractors = high_churn = urgent = 0
 
     print(f"[batch] Iniciando batch_id={batch_id} — {len(feedbacks)} feedbacks")
 
@@ -104,73 +121,50 @@ def _handle_batch(event):
         customer_id = fb.get("customer_id", None)
 
         if not user_input or len(user_input) < 10 or len(user_input) > 5000:
-            results.append({
-                "index":       i,
-                "customer_id": customer_id,
-                "error":       "Texto inválido (vacío, muy corto o muy largo)",
-            })
+            results.append({"index": i, "customer_id": customer_id, "error": "Texto inválido"})
             failed += 1
             continue
 
         try:
             comprehend_result = analyze_text(user_input)
             result = analyze_feedback(user_input, comprehend_result)
-
             result["source"]      = source
             result["customer_id"] = customer_id
             result["org_id"]      = org_id
             result["input"]       = user_input[:300]
-
             analysis_id  = save_analysis(user_input, result)
             result["id"] = analysis_id
             result["index"] = i
 
             nps = result.get("nps_classification", "pasivo")
-            if nps == "promotor":  promoters  += 1
+            if nps == "promotor":    promoters  += 1
             elif nps == "detractor": detractors += 1
-            else:                  passives   += 1
+            else:                    passives   += 1
             if result.get("churn_risk") == "alto": high_churn += 1
             if result.get("urgency"):              urgent     += 1
-
             results.append(result)
-            print(f"[batch] {i+1}/{len(feedbacks)} OK — nps={nps}")
-
         except Exception as e:
-            print(f"[batch] {i+1}/{len(feedbacks)} ERROR: {e}")
-            results.append({
-                "index":       i,
-                "customer_id": customer_id,
-                "error":       str(e),
-            })
+            print(f"[batch] {i+1} ERROR: {e}")
+            results.append({"index": i, "customer_id": customer_id, "error": str(e)})
             failed += 1
 
         if i < len(feedbacks) - 1:
             time.sleep(0.5)
 
-    total_ok = len(feedbacks) - failed
+    total_ok  = len(feedbacks) - failed
     nps_score = round(((promoters - detractors) / total_ok) * 100) if total_ok > 0 else 0
-
-    summary = {
-        "promoters":      promoters,
-        "passives":       passives,
-        "detractors":     detractors,
-        "nps_score":      nps_score,
-        "high_churn_count": high_churn,
-        "urgent_count":   urgent,
+    summary   = {
+        "promoters": promoters, "passives": passives, "detractors": detractors,
+        "nps_score": nps_score, "high_churn_count": high_churn, "urgent_count": urgent,
     }
-
-    print(f"[batch] Completado — procesados={total_ok} fallidos={failed} nps={nps_score}")
 
     return {
         "statusCode": 200,
         "headers":    HEADERS,
-        "body":       json.dumps({
-            "batch_id":  batch_id,
-            "total":     len(feedbacks),
-            "processed": total_ok,
-            "failed":    failed,
-            "results":   results,
-            "summary":   summary,
+        "body":       _dumps({
+            "batch_id": batch_id, "total": len(feedbacks),
+            "processed": total_ok, "failed": failed,
+            "results": results, "summary": summary,
         }, ensure_ascii=False),
     }
 
@@ -182,13 +176,126 @@ def _handle_history(event):
     return {
         "statusCode": 200,
         "headers":    HEADERS,
-        "body":       json.dumps(items, ensure_ascii=False),
+        "body":       _dumps(items, ensure_ascii=False),
     }
+
+
+# ── Endpoints nuevos ──────────────────────────────────────────────────────────
+
+def _handle_upload_csv(event):
+    print("[csv] Recibiendo archivo CSV")
+    try:
+        file_bytes, org_id = _extract_multipart(event)
+    except Exception as e:
+        return _error(400, f"No se pudo leer el archivo: {e}")
+
+    if not file_bytes:
+        return _error(400, "No se encontró el archivo en el request.")
+
+    parsed = parse_csv(file_bytes)
+    if not parsed["success"]:
+        return _error(400, f"CSV inválido: {'; '.join(parsed['errors'])}")
+
+    rows = parsed["rows"]
+    if not rows:
+        return _error(400, "No se encontraron filas válidas en el CSV.")
+
+    print(f"[csv] {len(rows)} filas válidas — iniciando análisis")
+    batch_id = str(uuid.uuid4())
+    result   = process_batch(rows, org_id=org_id, batch_id=batch_id)
+
+    return {
+        "statusCode": 200,
+        "headers":    HEADERS,
+        "body":       _dumps(result, ensure_ascii=False),
+    }
+
+
+def _handle_get_batch(batch_id: str):
+    if not batch_id:
+        return _error(400, "batch_id es requerido.")
+
+    item = get_batch_summary(batch_id)
+    if item is None:
+        return _error(404, f"Batch '{batch_id}' no encontrado.")
+
+    return {
+        "statusCode": 200,
+        "headers":    HEADERS,
+        "body":       _dumps(item, ensure_ascii=False),
+    }
+
+
+# ── Helpers ───────────────────────────────────────────────────────────────────
+
+def _extract_multipart(event) -> tuple[bytes, str]:
+    """
+    Parser manual de multipart/form-data.
+    Reemplaza cgi.FieldStorage (deprecado en Python 3.11+, falla en Lambda).
+    """
+    headers      = event.get("headers") or {}
+    content_type = headers.get("content-type") or headers.get("Content-Type") or ""
+    raw_body     = event.get("body") or ""
+
+    # API Gateway base64-encodea el body cuando BinaryMediaTypes está configurado
+    if event.get("isBase64Encoded"):
+        body_bytes = base64.b64decode(raw_body)
+    else:
+        body_bytes = raw_body.encode("latin-1")  # latin-1 preserva bytes 1:1
+
+    # Extraer boundary del Content-Type
+    boundary = None
+    for segment in content_type.split(";"):
+        segment = segment.strip()
+        if segment.lower().startswith("boundary="):
+            boundary = segment[9:].strip('"')
+            break
+
+    if not boundary:
+        raise ValueError(f"No se encontró boundary en Content-Type: {content_type}")
+
+    sep        = f"--{boundary}".encode()
+    file_bytes = None
+    org_id     = "default"
+
+    for part in body_bytes.split(sep)[1:]:
+        if part.strip() in (b"--", b"--\r\n", b""):
+            break
+
+        # Separar headers del contenido
+        if b"\r\n\r\n" not in part:
+            continue
+        part_headers_raw, content = part.split(b"\r\n\r\n", 1)
+
+        # Quitar \r\n final del contenido
+        if content.endswith(b"\r\n"):
+            content = content[:-2]
+
+        part_headers = part_headers_raw.decode("utf-8", errors="replace")
+
+        # Extraer name del Content-Disposition
+        name = None
+        for line in part_headers.splitlines():
+            if "Content-Disposition" in line:
+                for token in line.split(";"):
+                    token = token.strip()
+                    if token.lower().startswith("name="):
+                        name = token[5:].strip('"')
+
+        if name == "file":
+            file_bytes = content
+        elif name == "org_id":
+            org_id = content.decode("utf-8", errors="replace").strip()
+
+    if file_bytes is None:
+        raise ValueError("Campo 'file' no encontrado en el form-data")
+
+    return file_bytes, org_id
 
 
 def _error(status: int, message: str) -> dict:
     return {
         "statusCode": status,
         "headers":    HEADERS,
-        "body":       json.dumps({"error": message}, ensure_ascii=False),
+        "body":       _dumps({"error": message}, ensure_ascii=False),
     }

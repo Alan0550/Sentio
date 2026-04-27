@@ -29,6 +29,44 @@ export async function getHistory(org_id = null) {
   return response.json()
 }
 
+export async function analyzeBatch({ feedbacks, org_id = 'default', source = 'csv_upload' }) {
+  const response = await fetch(`${API_URL}/analyze/batch`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ feedbacks, org_id, source }),
+  })
+  if (!response.ok) {
+    const err = await response.json().catch(() => ({}))
+    throw new Error(err.error || `Error ${response.status}`)
+  }
+  return response.json()
+}
+
+export async function uploadCsv(file, orgId = 'default') {
+  const formData = new FormData()
+  formData.append('file', file)
+  formData.append('org_id', orgId)
+
+  const response = await fetch(`${API_URL}/upload/csv`, {
+    method: 'POST',
+    body: formData,
+    // NO poner Content-Type — el browser lo pone automáticamente con el boundary
+  })
+
+  if (!response.ok) {
+    const error = await response.json().catch(() => ({}))
+    throw new Error(error.error || 'Error al procesar el CSV')
+  }
+
+  return response.json()
+}
+
+export async function getBatch(batchId) {
+  const response = await fetch(`${API_URL}/batch/${batchId}`)
+  if (!response.ok) throw new Error('Batch no encontrado')
+  return response.json()
+}
+
 export function computeDashboardMetrics(items) {
   if (!items.length) return null
 

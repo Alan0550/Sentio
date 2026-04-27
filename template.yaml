@@ -30,6 +30,9 @@ Resources:
     Properties:
       Name: !Sub sentio-api-${Stage}
       StageName: !Ref Stage
+      BinaryMediaTypes:
+        - multipart/form-data
+        - application/octet-stream
       Cors:
         AllowMethods: "'POST,GET,OPTIONS'"
         AllowHeaders: "'Content-Type'"
@@ -101,6 +104,18 @@ Resources:
           Properties:
             RestApiId: !Ref SentioApi
             Path: /history
+            Method: GET
+        UploadCsv:
+          Type: Api
+          Properties:
+            RestApiId: !Ref SentioApi
+            Path: /upload/csv
+            Method: POST
+        GetBatch:
+          Type: Api
+          Properties:
+            RestApiId: !Ref SentioApi
+            Path: /batch/{batch_id}
             Method: GET
 
 Outputs:
