@@ -1,18 +1,18 @@
 AWSTemplateFormatVersion: '2010-09-09'
 Transform: AWS::Serverless-2016-10-31
-Description: TruthLens - API de análisis de credibilidad de noticias
+Description: Sentio - Plataforma de análisis de voz del cliente (VoC) y experiencia de cliente (CX)
 
 Globals:
   Function:
     Runtime: python3.12
-    Timeout: 45    # Bedrock(25s) + Comprehend(~5s) + scraping(~10s) + margen
+    Timeout: 45    # Bedrock(25s) + Comprehend(~5s) + margen
     MemorySize: 256
     Environment:
       Variables:
         STAGE: !Ref Stage
   Api:
     Cors:
-      AllowMethods: "'POST,OPTIONS'"
+      AllowMethods: "'POST,GET,OPTIONS'"
       AllowHeaders: "'Content-Type'"
       AllowOrigin: "'*'"
 
@@ -21,22 +21,17 @@ Parameters:
     Type: String
     Default: dev
     AllowedValues: [dev, prod]
-  BraveApiKey:
-    Type: String
-    Default: ""
-    NoEcho: true
-    Description: API key de Brave Search (opcional — el sistema funciona sin ella)
 
 Resources:
 
-  #  API Gateway 
-  TruthLensApi:
+  #  API Gateway
+  SentioApi:
     Type: AWS::Serverless::Api
     Properties:
-      Name: !Sub truthlens-api-${Stage}
+      Name: !Sub sentio-api-${Stage}
       StageName: !Ref Stage
       Cors:
-        AllowMethods: "'POST,OPTIONS'"
+        AllowMethods: "'POST,GET,OPTIONS'"
         AllowHeaders: "'Content-Type'"
         AllowOrigin: "'*'"
 
@@ -44,7 +39,7 @@ Resources:
   AnalysisTable:
     Type: AWS::DynamoDB::Table
     Properties:
-      TableName: !Sub truthlens-analysis-${Stage}
+      TableName: !Sub sentio-analyses-${Stage}
       BillingMode: PAY_PER_REQUEST
       AttributeDefinitions:
         - AttributeName: id
@@ -58,13 +53,13 @@ Resources:
           KeyType: RANGE
 
   #  Lambda: analyze
-  AnalyzeFunction:
+  SentioAnalyzeFunction:
     Type: AWS::Serverless::Function
     Properties:
-      FunctionName: !Sub truthlens-analyze-${Stage}
+      FunctionName: !Sub sentio-analyze-${Stage}
       CodeUri: backend/functions/analyze/
       Handler: handler.lambda_handler
-      Description: Recibe texto o URL y devuelve score de credibilidad
+      Description: Recibe feedback de clientes y devuelve análisis NPS, aspectos y riesgo de churn
       Policies:
         - AWSLambdaBasicExecutionRole
         - Statement:
@@ -79,40 +74,46 @@ Resources:
               Resource: "*"
             - Effect: Allow
               Action:
-                - rekognition:DetectModerationLabels
-                - rekognition:DetectText
-              Resource: "*"
-            - Effect: Allow
-              Action:
                 - dynamodb:PutItem
+                - dynamodb:GetItem
                 - dynamodb:Query
                 - dynamodb:Scan
               Resource: !GetAtt AnalysisTable.Arn
       Environment:
         Variables:
-          TABLE_NAME:    !Ref AnalysisTable
-          BRAVE_API_KEY: !Ref BraveApiKey
+          TABLE_NAME:       !Ref AnalysisTable
+          BEDROCK_MODEL_ID: us.anthropic.claude-haiku-4-5-20251001-v1:0
       Events:
         AnalyzePost:
           Type: Api
           Properties:
-            RestApiId: !Ref TruthLensApi
+            RestApiId: !Ref SentioApi
             Path: /analyze
+            Method: POST
+        AnalyzeBatchPost:
+          Type: Api
+          Properties:
+            RestApiId: !Ref SentioApi
+            Path: /analyze/batch
             Method: POST
         HistoryGet:
           Type: Api
           Properties:
-            RestApiId: !Ref TruthLensApi
+            RestApiId: !Ref SentioApi
             Path: /history
             Method: GET
 
 Outputs:
   ApiUrl:
-    Description: URL base del API
-    Value: !Sub "https://${TruthLensApi}.execute-api.${AWS::Region}.amazonaws.com/${Stage}"
+    Description: URL base del API de Sentio
+    Value: !Sub "https://${SentioApi}.execute-api.${AWS::Region}.amazonaws.com/${Stage}"
     Export:
-      Name: !Sub truthlens-api-url-${Stage}
+      Name: !Sub sentio-api-url-${Stage}
 
-  AnalyzeFunctionArn:
-    Description: ARN de la función analyze
-    Value: !GetAtt AnalyzeFunction.Arn
+  SentioAnalyzeFunctionArn:
+    Description: ARN de la función Lambda de análisis
+    Value: !GetAtt SentioAnalyzeFunction.Arn
+
+  AnalysisTableName:
+    Description: Nombre de la tabla DynamoDB
+    Value: !Ref AnalysisTable

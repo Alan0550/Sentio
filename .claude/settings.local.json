@@ -4,7 +4,20 @@
       "Bash(aws s3 *)",
       "Bash(aws s3api put-bucket-policy --bucket truthlens-frontend-dev --policy '{ *)",
       "Bash(aws s3api *)",
-      "Bash(aws cloudfront create-distribution --distribution-config '{ *)"
+      "Bash(aws cloudfront create-distribution --distribution-config '{ *)",
+      "Bash(python tests/test_prompt.py)",
+      "Bash(pip install *)",
+      "Bash(pip --version)",
+      "Bash(python3.12 -m pip install boto3 --quiet)",
+      "Bash(/c/Users/Alan/AppData/Local/Programs/Python/Python312/python.exe -m pip install boto3 --quiet)",
+      "Bash(/c/Users/Alan/AppData/Local/Programs/Python/Python312/python.exe tests/test_prompt.py)",
+      "Bash(PYTHONIOENCODING=utf-8 /c/Users/Alan/AppData/Local/Programs/Python/Python312/python.exe tests/test_prompt.py)",
+      "Bash(npm install *)",
+      "Bash(npm run *)",
+      "Bash(curl -s http://localhost:3000)",
+      "Bash(/c/Users/Alan/AppData/Local/Programs/Python/Python312/python.exe -c \"import handler; print\\('handler.py OK'\\)\")",
+      "Bash(curl -s -o /dev/null -w \"%{http_code}\" -X OPTIONS \"https://c973n26u42.execute-api.us-east-1.amazonaws.com/dev/analyze\" -H \"Origin: http://localhost:3000\")",
+      "Bash(curl -s -X POST https://c973n26u42.execute-api.us-east-1.amazonaws.com/dev/analyze -H 'Content-Type: application/json' -d '{\"input\": \"El servicio es pésimo, nunca más vuelvo.\"}')"
     ]
   }
 }
