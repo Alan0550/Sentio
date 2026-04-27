@@ -84,11 +84,48 @@ def get_recent(limit: int = 20, org_id: str = None) -> list:
             if item.get("urgency_reason") == "null":
                 item["urgency_reason"] = None
 
+        # Excluir batch_summary — son resúmenes, no análisis individuales
+        items = [i for i in items if i.get("type") != "batch_summary"]
+
         sorted_items = sorted(items, key=lambda x: x.get("timestamp", ""), reverse=True)
         return sorted_items[:limit]
 
     except (BotoCoreError, ClientError) as e:
         print(f"[history] Error al consultar DynamoDB: {e}")
+        return []
+
+
+def get_analyses_by_period(org_id: str, period: str) -> list:
+    """Devuelve todos los análisis individuales de un org_id y período (YYYY-MM)."""
+    try:
+        Attr = boto3.dynamodb.conditions.Attr
+        filter_expr = (
+            Attr("org_id").eq(org_id) &
+            Attr("timestamp").begins_with(period) &
+            Attr("type").not_exists()          # excluye batch_summary
+        )
+        response = _table.scan(FilterExpression=filter_expr)
+        items    = response.get("Items", [])
+
+        # Paginar si hay más ítems
+        while "LastEvaluatedKey" in response:
+            response = _table.scan(
+                FilterExpression=filter_expr,
+                ExclusiveStartKey=response["LastEvaluatedKey"],
+            )
+            items.extend(response.get("Items", []))
+
+        for item in items:
+            if isinstance(item.get("aspects"), str):
+                try:
+                    item["aspects"] = json.loads(item["aspects"])
+                except (json.JSONDecodeError, TypeError):
+                    item["aspects"] = []
+
+        return items
+
+    except (BotoCoreError, ClientError) as e:
+        print(f"[history] Error en get_analyses_by_period: {e}")
         return []
 
 

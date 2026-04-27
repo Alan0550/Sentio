@@ -1,278 +1,293 @@
-import { useState, useEffect } from 'react'
-import { Users, AlertTriangle, TrendingDown, BarChart2, ChevronDown, ChevronUp, RefreshCw } from 'lucide-react'
-import { getHistory, computeDashboardMetrics } from '../services/api'
+import { useState, useEffect, useCallback } from 'react'
+import { RefreshCw, AlertTriangle, TrendingDown, Users, BarChart2, GitCompare } from 'lucide-react'
+import PeriodSelector, { formatPeriod } from './PeriodSelector'
+import TrendChart from './TrendChart'
+import AspectEvolution from './AspectEvolution'
+import { getDashboard, comparePeriods } from '../services/api'
 
-const NPS_BADGE = {
-  promotor:  { color: '#10B981', bg: '#ECFDF5', label: 'Promotor' },
-  pasivo:    { color: '#F59E0B', bg: '#FFFBEB', label: 'Pasivo'   },
-  detractor: { color: '#EF4444', bg: '#FEF2F2', label: 'Detractor' },
+// ── Helpers ───────────────────────────────────────────────────────────────────
+
+function getLast6Months() {
+  const months = []
+  const now    = new Date()
+  const seen   = new Set()
+  for (let i = 5; i >= 0; i--) {
+    const d = new Date(now.getFullYear(), now.getMonth() - i, 1)
+    const p = `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}`
+    if (!seen.has(p)) { seen.add(p); months.push(p) }
+  }
+  return months
 }
-const CHURN_COLOR = { alto: '#EF4444', medio: '#F97316', bajo: '#10B981' }
 
-function MetricCard({ icon, label, value, color, note }) {
+function currentPeriod() {
+  const now = new Date()
+  return `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}`
+}
+
+function npsColor(score) {
+  if (score === null || score === undefined) return '#94A3B8'
+  return score >= 0 ? '#10B981' : '#EF4444'
+}
+
+function DeltaBadge({ change, invert = false }) {
+  if (change === null || change === undefined) return <span className="text-xs text-slate-400">—</span>
+  const positive = invert ? change < 0 : change > 0
+  const color    = positive ? '#10B981' : change === 0 ? '#94A3B8' : '#EF4444'
+  const arrow    = change > 0 ? '▲' : change < 0 ? '▼' : '●'
+  const sign     = change > 0 ? '+' : ''
   return (
-    <div className="bg-white rounded-2xl border border-slate-200 p-5 space-y-2">
+    <span className="text-xs font-medium" style={{ color }}>
+      {arrow} {sign}{change} vs mes ant.
+    </span>
+  )
+}
+
+function MetricCard({ label, value, color, delta, invertDelta, icon, note }) {
+  return (
+    <div className="bg-white rounded-2xl border border-slate-200 p-4 space-y-2">
       <div className="flex items-center justify-between">
         <span className="text-xs font-medium text-slate-500">{label}</span>
         <div className="p-1.5 rounded-lg" style={{ backgroundColor: `${color}15` }}>
           <div style={{ color }}>{icon}</div>
         </div>
       </div>
-      <div className="text-3xl font-black" style={{ color }}>{value}</div>
+      <div className="text-3xl font-black" style={{ color }}>
+        {value !== null && value !== undefined ? value : '—'}
+      </div>
       {note && <p className="text-xs text-slate-400">{note}</p>}
+      <DeltaBadge change={delta} invert={invertDelta} />
     </div>
   )
 }
 
-function NpsBar({ label, count, total, color }) {
-  const pct = total > 0 ? Math.round((count / total) * 100) : 0
+function NpsBar({ label, count, pct, color }) {
   return (
     <div className="flex items-center gap-3">
-      <span className="text-xs font-medium w-20 text-slate-600">{label}</span>
-      <div className="flex-1 h-5 bg-slate-100 rounded-full overflow-hidden">
-        <div
-          className="h-full rounded-full transition-all duration-500"
-          style={{ width: `${pct}%`, backgroundColor: color }}
-        />
+      <span className="text-xs font-medium w-24 text-slate-600">{label}</span>
+      <div className="flex-1 h-4 bg-slate-100 rounded-full overflow-hidden">
+        <div className="h-full rounded-full" style={{ width: `${pct || 0}%`, backgroundColor: color }} />
       </div>
-      <span className="text-xs font-bold w-14 text-right" style={{ color }}>
-        {count} ({pct}%)
+      <span className="text-xs font-bold w-20 text-right" style={{ color }}>
+        {pct ?? 0}% ({count ?? 0})
       </span>
     </div>
   )
 }
 
-function HistoryItem({ item }) {
-  const [expanded, setExpanded] = useState(false)
-  const nps    = item.nps_classification || 'pasivo'
-  const badge  = NPS_BADGE[nps] || NPS_BADGE.pasivo
-  const churnC = CHURN_COLOR[item.churn_risk] || '#94A3B8'
-  const ts     = item.timestamp
-    ? new Date(item.timestamp).toLocaleString('es-BO', { day: '2-digit', month: 'short', hour: '2-digit', minute: '2-digit' })
-    : '—'
-
+function SkeletonCard() {
   return (
-    <div className="border border-slate-200 rounded-xl overflow-hidden">
-      <button
-        onClick={() => setExpanded(!expanded)}
-        className="w-full flex items-center gap-3 px-4 py-3 hover:bg-slate-50 transition-colors text-left"
-      >
-        <span
-          className="text-xs font-semibold px-2.5 py-1 rounded-full shrink-0"
-          style={{ color: badge.color, backgroundColor: badge.bg }}
-        >
-          {badge.label}
-        </span>
-        <span className="flex-1 truncate text-sm text-slate-600">
-          {item.input_preview || item.input || '(sin texto)'}
-        </span>
-        <div className="flex items-center gap-2 shrink-0">
-          {item.urgency && (
-            <AlertTriangle size={13} className="text-red-500" />
-          )}
-          <span
-            className="text-xs font-medium px-2 py-0.5 rounded-full"
-            style={{ color: churnC, backgroundColor: `${churnC}15` }}
-          >
-            {item.churn_risk}
-          </span>
-          <span className="text-xs text-slate-400">{ts}</span>
-          {expanded ? <ChevronUp size={14} className="text-slate-400" /> : <ChevronDown size={14} className="text-slate-400" />}
-        </div>
-      </button>
-
-      {expanded && (
-        <div className="border-t border-slate-100 px-4 py-4 bg-slate-50 space-y-3">
-          <div className="grid grid-cols-2 sm:grid-cols-4 gap-3 text-xs">
-            <div>
-              <p className="text-slate-400 mb-0.5">Score estimado</p>
-              <p className="font-bold text-slate-700">{item.inferred_score}/10</p>
-            </div>
-            <div>
-              <p className="text-slate-400 mb-0.5">Emoción</p>
-              <p className="font-medium text-slate-700 capitalize">{(item.dominant_emotion || '').replace('_', ' ')}</p>
-            </div>
-            <div>
-              <p className="text-slate-400 mb-0.5">Industria</p>
-              <p className="font-medium text-slate-700 capitalize">{item.industry || '—'}</p>
-            </div>
-            <div>
-              <p className="text-slate-400 mb-0.5">Origen</p>
-              <p className="font-medium text-slate-700 capitalize">{item.source || 'manual'}</p>
-            </div>
-          </div>
-          {item.summary && (
-            <p className="text-xs text-slate-600 leading-relaxed border-t border-slate-200 pt-3">
-              {item.summary}
-            </p>
-          )}
-          {item.recommended_action && (
-            <div className="rounded-lg px-3 py-2 text-xs" style={{ backgroundColor: '#EFF6FF' }}>
-              <span className="font-semibold text-indigo-700">Acción: </span>
-              <span className="text-indigo-800">{item.recommended_action}</span>
-            </div>
-          )}
-          {Array.isArray(item.aspects) && item.aspects.length > 0 && (
-            <div className="flex flex-wrap gap-1.5 border-t border-slate-200 pt-3">
-              {item.aspects.map((a, i) => {
-                const c = a.sentiment === 'positivo' ? '#10B981' : a.sentiment === 'negativo' ? '#EF4444' : '#94A3B8'
-                return (
-                  <span key={i} className="text-xs px-2 py-0.5 rounded-full border" style={{ color: c, borderColor: `${c}60`, backgroundColor: `${c}10` }}>
-                    {a.aspect}
-                  </span>
-                )
-              })}
-            </div>
-          )}
-        </div>
-      )}
+    <div className="bg-white rounded-2xl border border-slate-200 p-4 space-y-3 animate-pulse">
+      <div className="h-3 bg-slate-100 rounded w-1/2" />
+      <div className="h-8 bg-slate-100 rounded w-1/3" />
+      <div className="h-3 bg-slate-100 rounded w-2/3" />
     </div>
   )
 }
 
-const FILTERS = {
-  nps:     ['todos', 'promotor', 'pasivo', 'detractor'],
-  churn:   ['todos', 'alto', 'medio', 'bajo'],
-  urgency: ['todos', 'urgente', 'normal'],
-  industry:['todos', 'telco', 'retail', 'general'],
-}
+// ── Componente principal ──────────────────────────────────────────────────────
 
 export default function Dashboard() {
-  const [items, setItems]       = useState([])
-  const [loading, setLoading]   = useState(true)
-  const [error, setError]       = useState(null)
-  const [filters, setFilters]   = useState({ nps: 'todos', churn: 'todos', urgency: 'todos', industry: 'todos' })
+  const periods6          = getLast6Months()
+  const [orgId, setOrgId] = useState('default')
+  const [selPeriod, setSelPeriod]   = useState(currentPeriod())
+  const [trendData, setTrendData]   = useState([])
+  const [loading, setLoading]       = useState(true)
+  const [error, setError]           = useState(null)
 
-  async function load() {
-    setLoading(true)
-    setError(null)
+  // Comparación
+  const [cmpA, setCmpA]           = useState(periods6[periods6.length - 2] || periods6[0])
+  const [cmpB, setCmpB]           = useState(currentPeriod())
+  const [cmpResult, setCmpResult] = useState(null)
+  const [cmpLoading, setCmpLoading] = useState(false)
+  const [cmpError, setCmpError]   = useState(null)
+
+  const load = useCallback(async () => {
+    setLoading(true); setError(null)
     try {
-      const data = await getHistory()
-      setItems(Array.isArray(data) ? data : [])
+      const res = await getDashboard(orgId, null, periods6)
+      setTrendData(res.data || [])
     } catch (e) {
       setError(e.message)
     } finally {
       setLoading(false)
     }
+  }, [orgId])
+
+  useEffect(() => { load() }, [load])
+
+  // Datos del período seleccionado
+  const dataByPeriod = Object.fromEntries(trendData.map(d => [d.period, d]))
+  const current      = dataByPeriod[selPeriod]
+  const prevPeriod   = periods6[periods6.indexOf(selPeriod) - 1]
+  const prev         = prevPeriod ? dataByPeriod[prevPeriod] : null
+
+  const npsDelta    = current && prev && current.nps_score !== null && prev.nps_score !== null
+    ? current.nps_score - prev.nps_score : null
+  const totalDelta  = current && prev ? (current.total_analyzed || 0) - (prev.total_analyzed || 0) : null
+  const urgDelta    = current && prev ? (current.urgent_count   || 0) - (prev.urgent_count   || 0) : null
+  const churnDelta  = current && prev ? (current.high_churn_count || 0) - (prev.high_churn_count || 0) : null
+
+  async function handleCompare() {
+    setCmpLoading(true); setCmpError(null); setCmpResult(null)
+    try {
+      const res = await comparePeriods(orgId, cmpA, cmpB)
+      setCmpResult(res)
+    } catch (e) {
+      setCmpError(e.message)
+    } finally {
+      setCmpLoading(false)
+    }
   }
 
-  useEffect(() => { load() }, [])
-
-  const metrics = computeDashboardMetrics(items)
-
-  const filtered = items.filter(item => {
-    if (filters.nps !== 'todos' && item.nps_classification !== filters.nps) return false
-    if (filters.churn !== 'todos' && item.churn_risk !== filters.churn) return false
-    if (filters.urgency === 'urgente' && !item.urgency) return false
-    if (filters.urgency === 'normal' && item.urgency) return false
-    if (filters.industry !== 'todos' && item.industry !== filters.industry) return false
-    return true
-  })
-
-  if (loading) return (
-    <div className="flex flex-col items-center justify-center py-24 gap-4">
-      <div className="w-10 h-10 border-4 rounded-full animate-spin"
-           style={{ borderColor: '#E2E8F0', borderTopColor: '#6366F1' }} />
-      <p className="text-slate-500 text-sm">Cargando historial...</p>
-    </div>
-  )
-
-  if (error) return (
-    <div className="text-center py-16 space-y-3">
-      <p className="text-red-500 text-sm">{error}</p>
-      <button onClick={load} className="text-indigo-600 text-sm underline">Reintentar</button>
-    </div>
-  )
-
-  if (!items.length) return (
-    <div className="text-center py-24 space-y-3">
-      <BarChart2 size={40} className="mx-auto text-slate-300" />
-      <p className="text-slate-500 text-sm">Todavía no hay análisis guardados.</p>
-      <p className="text-slate-400 text-xs">Analizá el primer feedback desde la vista Analizador.</p>
-    </div>
-  )
+  const bestMonth = trendData.filter(d => d.nps_score !== null)
+    .sort((a, b) => b.nps_score - a.nps_score)[0]
+  const worstMonth = trendData.filter(d => d.nps_score !== null)
+    .sort((a, b) => a.nps_score - b.nps_score)[0]
 
   return (
     <div className="space-y-6">
-      <div className="flex items-center justify-between">
-        <h2 className="text-xl font-bold text-slate-800">Dashboard</h2>
-        <button
-          onClick={load}
-          className="flex items-center gap-1.5 text-xs text-slate-500 hover:text-slate-700 transition-colors"
-        >
-          <RefreshCw size={13} />
-          Actualizar
-        </button>
+
+      {/* Header */}
+      <div className="flex items-start justify-between gap-4 flex-wrap">
+        <div>
+          <h2 className="text-xl font-bold text-slate-800">Dashboard</h2>
+          <p className="text-sm text-slate-500 mt-0.5">Evolución de la experiencia del cliente</p>
+        </div>
+        <div className="flex items-center gap-2">
+          <input
+            value={orgId} onChange={e => setOrgId(e.target.value)}
+            placeholder="Organización"
+            className="border border-slate-200 rounded-lg px-3 py-1.5 text-xs text-slate-700 outline-none focus:border-indigo-400 w-32"
+          />
+          <button onClick={load}
+            className="flex items-center gap-1.5 text-xs text-slate-500 hover:text-slate-700 border border-slate-200 rounded-lg px-3 py-1.5 transition-colors">
+            <RefreshCw size={12} /> Actualizar
+          </button>
+        </div>
       </div>
 
-      {/* Métricas superiores */}
-      {metrics && (
-        <div className="grid grid-cols-2 sm:grid-cols-4 gap-4">
-          <MetricCard
-            icon={<BarChart2 size={16} />}
-            label="NPS del período"
-            value={metrics.npsScore > 0 ? `+${metrics.npsScore}` : metrics.npsScore}
-            color={metrics.npsScore >= 0 ? '#10B981' : '#EF4444'}
-            note={`${metrics.total} análisis totales`}
-          />
-          <MetricCard
-            icon={<Users size={16} />}
-            label="Total analizados"
-            value={metrics.total}
-            color="#6366F1"
-            note={`${metrics.promoters} promotores`}
-          />
-          <MetricCard
-            icon={<AlertTriangle size={16} />}
-            label="Requieren atención"
-            value={metrics.urgentCount}
-            color="#EF4444"
-            note="con urgencia activa"
-          />
-          <MetricCard
-            icon={<TrendingDown size={16} />}
-            label="Churn alto"
-            value={metrics.highChurn}
-            color="#F97316"
-            note="riesgo de abandono"
-          />
+      {error && (
+        <div className="bg-red-50 border border-red-200 rounded-xl px-4 py-3 flex items-center justify-between">
+          <p className="text-sm text-red-600">{error}</p>
+          <button onClick={load} className="text-xs text-red-500 underline">Reintentar</button>
         </div>
       )}
 
-      {/* Distribución NPS */}
-      {metrics && (
+      {/* Selector de período */}
+      <div className="bg-white rounded-2xl border border-slate-200 p-4 space-y-3">
+        <p className="text-xs font-semibold text-slate-500 uppercase tracking-wide">Período</p>
+        <PeriodSelector
+          selectedPeriod={selPeriod}
+          onPeriodChange={setSelPeriod}
+          availablePeriods={periods6}
+          dataByPeriod={dataByPeriod}
+        />
+      </div>
+
+      {/* Métricas del período seleccionado */}
+      {loading ? (
+        <div className="grid grid-cols-2 sm:grid-cols-4 gap-4">
+          {[0,1,2,3].map(i => <SkeletonCard key={i} />)}
+        </div>
+      ) : current ? (
+        <div className="grid grid-cols-2 sm:grid-cols-4 gap-4">
+          <MetricCard
+            label="NPS del período"
+            value={current.nps_score !== null ? (current.nps_score > 0 ? `+${current.nps_score}` : current.nps_score) : '—'}
+            color={npsColor(current.nps_score)}
+            delta={npsDelta}
+            icon={<BarChart2 size={15} />}
+            note={`${current.promoters_pct ?? 0}% prom. — ${current.detractors_pct ?? 0}% det.`}
+          />
+          <MetricCard
+            label="Total analizados"
+            value={current.total_analyzed ?? 0}
+            color="#6366F1"
+            delta={totalDelta}
+            icon={<Users size={15} />}
+          />
+          <MetricCard
+            label="Urgentes"
+            value={current.urgent_count ?? 0}
+            color="#EF4444"
+            delta={urgDelta}
+            invertDelta
+            icon={<AlertTriangle size={15} />}
+            note="requieren atención"
+          />
+          <MetricCard
+            label="Churn alto"
+            value={current.high_churn_count ?? 0}
+            color="#F97316"
+            delta={churnDelta}
+            invertDelta
+            icon={<TrendingDown size={15} />}
+            note="riesgo de abandono"
+          />
+        </div>
+      ) : !loading && (
+        <div className="bg-white rounded-2xl border border-slate-200 p-8 text-center">
+          <p className="text-slate-500 text-sm">Sin datos para {formatPeriod(selPeriod)}.</p>
+          <p className="text-slate-400 text-xs mt-1">Subí un CSV o analizá comentarios para este período.</p>
+        </div>
+      )}
+
+      {/* Gráfica de tendencia */}
+      <div className="bg-white rounded-2xl border border-slate-200 p-5 space-y-3">
+        <div className="flex items-center justify-between">
+          <h3 className="text-sm font-semibold text-slate-700">Evolución del NPS</h3>
+          {bestMonth && worstMonth && bestMonth.period !== worstMonth.period && (
+            <div className="flex gap-3 text-xs text-slate-400">
+              <span>Mejor: <strong style={{ color: '#10B981' }}>{formatPeriod(bestMonth.period)} ({bestMonth.nps_score > 0 ? '+' : ''}{bestMonth.nps_score})</strong></span>
+              <span>Peor: <strong style={{ color: '#EF4444' }}>{formatPeriod(worstMonth.period)} ({worstMonth.nps_score})</strong></span>
+            </div>
+          )}
+        </div>
+        {loading ? (
+          <div className="h-48 bg-slate-50 rounded-xl animate-pulse" />
+        ) : (
+          <TrendChart data={trendData} />
+        )}
+      </div>
+
+      {/* Distribución NPS del período */}
+      {current && current.total_analyzed > 0 && (
         <div className="bg-white rounded-2xl border border-slate-200 p-5 space-y-4">
-          <h3 className="text-sm font-semibold text-slate-700">Distribución NPS</h3>
-          <div className="space-y-3">
-            <NpsBar label="Promotores"  count={metrics.promoters}  total={metrics.total} color="#10B981" />
-            <NpsBar label="Pasivos"     count={metrics.passives}   total={metrics.total} color="#F59E0B" />
-            <NpsBar label="Detractores" count={metrics.detractors} total={metrics.total} color="#EF4444" />
+          <h3 className="text-sm font-semibold text-slate-700">
+            Distribución NPS — {formatPeriod(selPeriod)}
+          </h3>
+          <div className="space-y-2.5">
+            <NpsBar label="Promotores"  count={current.promoters}  pct={current.promoters_pct}  color="#10B981" />
+            <NpsBar label="Pasivos"     count={current.passives}   pct={current.passives_pct}   color="#F59E0B" />
+            <NpsBar label="Detractores" count={current.detractors} pct={current.detractors_pct} color="#EF4444" />
           </div>
         </div>
       )}
 
       {/* Top aspectos */}
-      {metrics?.topAspects?.length > 0 && (
+      {current?.top_aspects?.length > 0 && (
         <div className="bg-white rounded-2xl border border-slate-200 overflow-hidden">
           <div className="px-5 py-4 border-b border-slate-100">
-            <h3 className="text-sm font-semibold text-slate-700">Aspectos más mencionados</h3>
+            <h3 className="text-sm font-semibold text-slate-700">
+              Aspectos más mencionados — {formatPeriod(selPeriod)}
+            </h3>
           </div>
           <table className="w-full text-xs">
             <thead>
               <tr className="text-slate-400 border-b border-slate-100">
                 <th className="px-5 py-2 text-left font-medium">Aspecto</th>
                 <th className="px-3 py-2 text-center font-medium">Menciones</th>
-                <th className="px-3 py-2 text-center font-medium">% Positivo</th>
                 <th className="px-3 py-2 text-center font-medium">% Negativo</th>
+                <th className="px-3 py-2 text-center font-medium">% Positivo</th>
               </tr>
             </thead>
             <tbody>
-              {metrics.topAspects.map((a, i) => (
+              {current.top_aspects.map((a, i) => (
                 <tr key={i} className="border-b border-slate-50 hover:bg-slate-50">
-                  <td className="px-5 py-2.5 font-medium text-slate-700 capitalize">{a.name}</td>
-                  <td className="px-3 py-2.5 text-center text-slate-600">{a.total}</td>
-                  <td className="px-3 py-2.5 text-center font-semibold" style={{ color: '#10B981' }}>{a.pctPositive}%</td>
-                  <td className="px-3 py-2.5 text-center font-semibold" style={{ color: '#EF4444' }}>{a.pctNegative}%</td>
+                  <td className="px-5 py-2.5 font-medium text-slate-700 capitalize">{a.aspect}</td>
+                  <td className="px-3 py-2.5 text-center text-slate-600">{a.total_mentions}</td>
+                  <td className="px-3 py-2.5 text-center font-semibold" style={{ color: '#EF4444' }}>{a.negative_pct}%</td>
+                  <td className="px-3 py-2.5 text-center font-semibold" style={{ color: '#10B981' }}>{a.positive_pct}%</td>
                 </tr>
               ))}
             </tbody>
@@ -280,36 +295,58 @@ export default function Dashboard() {
         </div>
       )}
 
-      {/* Filtros */}
-      <div className="bg-white rounded-2xl border border-slate-200 p-4">
-        <p className="text-xs font-semibold text-slate-500 mb-3">Filtros</p>
-        <div className="flex flex-wrap gap-3">
-          {Object.entries(FILTERS).map(([key, options]) => (
-            <div key={key} className="flex items-center gap-1.5">
-              <span className="text-xs text-slate-400 capitalize">{key === 'nps' ? 'NPS' : key === 'churn' ? 'Churn' : key === 'urgency' ? 'Urgencia' : 'Industria'}:</span>
-              <select
-                value={filters[key]}
-                onChange={e => setFilters(f => ({ ...f, [key]: e.target.value }))}
-                className="text-xs border border-slate-200 rounded-lg px-2 py-1 text-slate-700 outline-none focus:border-indigo-400 capitalize"
-              >
-                {options.map(o => <option key={o} value={o} className="capitalize">{o}</option>)}
-              </select>
-            </div>
-          ))}
+      {/* Comparación de períodos */}
+      <div className="bg-white rounded-2xl border border-slate-200 p-5 space-y-4">
+        <div className="flex items-center gap-2">
+          <GitCompare size={16} className="text-slate-400" />
+          <h3 className="text-sm font-semibold text-slate-700">Comparar períodos</h3>
         </div>
-      </div>
+        <div className="flex items-center gap-3 flex-wrap">
+          <select value={cmpA} onChange={e => setCmpA(e.target.value)}
+            className="border border-slate-200 rounded-lg px-3 py-2 text-sm text-slate-700 outline-none focus:border-indigo-400">
+            {periods6.map(p => <option key={p} value={p}>{formatPeriod(p)}</option>)}
+          </select>
+          <span className="text-slate-400 text-sm">vs</span>
+          <select value={cmpB} onChange={e => setCmpB(e.target.value)}
+            className="border border-slate-200 rounded-lg px-3 py-2 text-sm text-slate-700 outline-none focus:border-indigo-400">
+            {periods6.map(p => <option key={p} value={p}>{formatPeriod(p)}</option>)}
+          </select>
+          <button onClick={handleCompare} disabled={cmpLoading || cmpA === cmpB}
+            className="px-4 py-2 rounded-lg text-sm font-medium transition-colors text-white"
+            style={{ backgroundColor: cmpLoading || cmpA === cmpB ? '#E2E8F0' : '#6366F1', color: cmpLoading || cmpA === cmpB ? '#94A3B8' : '#fff' }}>
+            {cmpLoading ? 'Comparando...' : 'Comparar'}
+          </button>
+        </div>
 
-      {/* Lista de análisis */}
-      <div className="space-y-3">
-        <p className="text-xs font-semibold text-slate-500 uppercase tracking-wide">
-          Análisis recientes ({filtered.length})
-        </p>
-        {filtered.length === 0 ? (
-          <p className="text-sm text-slate-400 text-center py-8">Ningún análisis coincide con los filtros seleccionados.</p>
-        ) : (
-          filtered.map(item => <HistoryItem key={item.id} item={item} />)
+        {cmpError && <p className="text-sm text-red-500">{cmpError}</p>}
+
+        {cmpResult && (
+          <div className="space-y-4 border-t border-slate-100 pt-4">
+            {/* Resumen */}
+            <div className="rounded-xl px-4 py-3 text-sm text-indigo-800"
+              style={{ backgroundColor: '#EFF6FF' }}>
+              {cmpResult.summary}
+            </div>
+            {/* Delta NPS */}
+            <div className="flex items-center gap-6 flex-wrap text-sm">
+              {[
+                { label: 'NPS', change: cmpResult.nps_change,    dir: cmpResult.nps_direction,    invert: false },
+                { label: 'Total', change: cmpResult.total_change, dir: cmpResult.total_direction,  invert: false },
+                { label: 'Urgentes', change: cmpResult.urgent_change, invert: true },
+                { label: 'Churn alto', change: cmpResult.churn_change, invert: true },
+              ].map(({ label, change, invert }) => (
+                <div key={label} className="flex items-center gap-2">
+                  <span className="text-slate-500">{label}:</span>
+                  <DeltaBadge change={change} invert={invert} />
+                </div>
+              ))}
+            </div>
+            {/* Evolución de aspectos */}
+            <AspectEvolution comparison={cmpResult} />
+          </div>
         )}
       </div>
     </div>
   )
 }
+

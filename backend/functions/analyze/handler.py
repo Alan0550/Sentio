@@ -24,6 +24,7 @@ from services.score_engine   import analyze_feedback
 from services.history        import save_analysis, get_recent, get_batch_summary
 from services.csv_processor  import parse_csv
 from services.batch_processor import process_batch
+from services.aggregator     import get_period_metrics, get_trend, compare_periods
 
 
 HEADERS = {
@@ -53,6 +54,12 @@ def lambda_handler(event, context):
     if path.startswith("/batch/") and method == "GET":
         batch_id = event.get("pathParameters", {}).get("batch_id") or path.split("/batch/")[-1]
         return _handle_get_batch(batch_id)
+
+    if path == "/dashboard/compare" and method == "GET":
+        return _handle_dashboard_compare(event)
+
+    if path == "/dashboard" and method == "GET":
+        return _handle_dashboard(event)
 
     return _handle_analyze(event)
 
@@ -223,6 +230,55 @@ def _handle_get_batch(batch_id: str):
         "statusCode": 200,
         "headers":    HEADERS,
         "body":       _dumps(item, ensure_ascii=False),
+    }
+
+
+def _handle_dashboard(event):
+    from datetime import datetime, timedelta, timezone
+    params  = event.get("queryStringParameters") or {}
+    org_id  = params.get("org_id", "default")
+    period  = params.get("period")
+    periods = params.get("periods")
+
+    if period:
+        data = get_period_metrics(org_id, period)
+        return {
+            "statusCode": 200, "headers": HEADERS,
+            "body": _dumps({"type": "period", "org_id": org_id, "data": data}),
+        }
+
+    if periods:
+        period_list = [p.strip() for p in periods.split(",") if p.strip()]
+    else:
+        now = datetime.now(timezone.utc)
+        seen, period_list = set(), []
+        for i in range(5, -1, -1):
+            d = (now.replace(day=1) - timedelta(days=i * 30))
+            p = d.strftime("%Y-%m")
+            if p not in seen:
+                seen.add(p)
+                period_list.append(p)
+
+    data = get_trend(org_id, period_list)
+    return {
+        "statusCode": 200, "headers": HEADERS,
+        "body": _dumps({"type": "trend", "org_id": org_id, "periods": period_list, "data": data}),
+    }
+
+
+def _handle_dashboard_compare(event):
+    params   = event.get("queryStringParameters") or {}
+    org_id   = params.get("org_id", "default")
+    period_a = params.get("period_a")
+    period_b = params.get("period_b")
+
+    if not period_a or not period_b:
+        return _error(400, "Se requieren 'period_a' y 'period_b' en formato YYYY-MM.")
+
+    data = compare_periods(org_id, period_a, period_b)
+    return {
+        "statusCode": 200, "headers": HEADERS,
+        "body": _dumps(data),
     }
 
 

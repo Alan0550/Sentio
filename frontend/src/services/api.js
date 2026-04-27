@@ -67,6 +67,22 @@ export async function getBatch(batchId) {
   return response.json()
 }
 
+export async function getDashboard(orgId = 'default', period = null, periods = null) {
+  let url = `${API_URL}/dashboard?org_id=${encodeURIComponent(orgId)}`
+  if (period)  url += `&period=${period}`
+  if (periods) url += `&periods=${Array.isArray(periods) ? periods.join(',') : periods}`
+  const response = await fetch(url)
+  if (!response.ok) throw new Error('Error al cargar el dashboard')
+  return response.json()
+}
+
+export async function comparePeriods(orgId = 'default', periodA, periodB) {
+  const url = `${API_URL}/dashboard/compare?org_id=${encodeURIComponent(orgId)}&period_a=${periodA}&period_b=${periodB}`
+  const response = await fetch(url)
+  if (!response.ok) throw new Error('Error al comparar períodos')
+  return response.json()
+}
+
 export function computeDashboardMetrics(items) {
   if (!items.length) return null
 

@@ -117,6 +117,18 @@ Resources:
             RestApiId: !Ref SentioApi
             Path: /batch/{batch_id}
             Method: GET
+        GetDashboard:
+          Type: Api
+          Properties:
+            RestApiId: !Ref SentioApi
+            Path: /dashboard
+            Method: GET
+        ComparePeriods:
+          Type: Api
+          Properties:
+            RestApiId: !Ref SentioApi
+            Path: /dashboard/compare
+            Method: GET
 
 Outputs:
   ApiUrl:

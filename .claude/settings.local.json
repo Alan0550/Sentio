@@ -28,7 +28,8 @@
       "Bash(curl -s \"https://7disp2jawi.execute-api.us-east-1.amazonaws.com/dev/history\")",
       "Bash(curl -s -X POST https://7disp2jawi.execute-api.us-east-1.amazonaws.com/dev/analyze -H 'Content-Type: application/json' -d '{\"input\":\"Pesimo servicio nunca mas vuelvo a esta empresa\"}')",
       "Bash(aws lambda *)",
-      "Read(//tmp/**)"
+      "Read(//tmp/**)",
+      "Bash(PYTHONIOENCODING=utf-8 /c/Users/Alan/AppData/Local/Programs/Python/Python312/python.exe -m tests.test_aggregator)"
     ]
   }
 }
