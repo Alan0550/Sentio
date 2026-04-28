@@ -1,6 +1,7 @@
 import { useState, useEffect } from 'react'
 import { Search, Users, AlertTriangle, TrendingUp, TrendingDown, Minus, Loader2 } from 'lucide-react'
 import { getCustomers, getCustomerHistory } from '../services/api'
+import ErrorBanner from './ErrorBanner'
 
 const NPS_COLOR = {
   promotor:  { color: '#10B981', bg: '#ECFDF5' },
@@ -91,7 +92,7 @@ export default function CustomerSearch({ onSelectCustomer }) {
   })
 
   return (
-    <div className="space-y-6">
+    <div className="max-w-5xl mx-auto space-y-6">
       <div>
         <h2 className="text-xl font-bold text-slate-800">Clientes</h2>
         <p className="text-sm text-slate-500 mt-0.5">Historial de interacciones por cliente identificado</p>
@@ -149,7 +150,7 @@ export default function CustomerSearch({ onSelectCustomer }) {
             ))}
           </div>
         ) : error ? (
-          <p className="text-sm text-red-500">{error}</p>
+          <ErrorBanner message={error} onRetry={loadList} />
         ) : filtered.length === 0 ? (
           <div className="text-center py-12 space-y-2">
             <Users size={32} className="mx-auto text-slate-300" />

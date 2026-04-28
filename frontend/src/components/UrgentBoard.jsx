@@ -2,6 +2,7 @@ import { useState, useEffect } from 'react'
 import { AlertTriangle, CheckCircle, Clock, RefreshCw } from 'lucide-react'
 import UrgentBadge from './UrgentBadge'
 import UrgentDrawer from './UrgentDrawer'
+import ErrorBanner  from './ErrorBanner'
 import { getUrgents, getUrgentMetrics } from '../services/api'
 
 const CHURN_COLOR = { alto: '#EF4444', medio: '#F97316', bajo: '#10B981' }
@@ -103,7 +104,7 @@ export default function UrgentBoard({ initialOpenId = null, onPendingCountChange
   const resolvedCount = items.filter(i => i.urgent_status === 'resuelto').length
 
   return (
-    <div className="space-y-6">
+    <div className="max-w-5xl mx-auto space-y-6">
       {/* Header */}
       <div className="flex items-start justify-between gap-4 flex-wrap">
         <div>
@@ -125,11 +126,7 @@ export default function UrgentBoard({ initialOpenId = null, onPendingCountChange
         </div>
       </div>
 
-      {error && (
-        <div className="bg-red-50 border border-red-200 rounded-xl px-4 py-3">
-          <p className="text-sm text-red-600">{error}</p>
-        </div>
-      )}
+      {error && <ErrorBanner message={error} onRetry={load} />}
 
       {/* Métricas */}
       {!loading && (

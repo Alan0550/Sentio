@@ -2,6 +2,7 @@ import { useState, useEffect } from 'react'
 import { BarChart2, Upload, FlaskConical, AlertTriangle, TrendingDown, CheckCircle } from 'lucide-react'
 import { getHomeSummary, getBenchmark, getAlerts } from '../services/api'
 import BenchmarkCard from './BenchmarkCard'
+import ErrorBanner from './ErrorBanner'
 import { formatPeriod } from './PeriodSelector'
 
 const CHURN_COLOR = { alto: '#EF4444', medio: '#F97316', bajo: '#10B981' }
@@ -126,7 +127,7 @@ export default function Home({ onNavigate }) {
   }
 
   return (
-    <div className="max-w-3xl mx-auto space-y-6">
+    <div className="max-w-5xl mx-auto space-y-6">
 
       {/* Sección 1 — Saludo */}
       <div>
@@ -277,9 +278,7 @@ export default function Home({ onNavigate }) {
       </div>
 
       {error && (
-        <div className="bg-red-50 border border-red-200 rounded-xl px-4 py-3">
-          <p className="text-sm text-red-600">{error}</p>
-        </div>
+        <ErrorBanner message={error} onRetry={() => { setError(null); getHomeSummary().then(setData).catch(e => setError(e.message)) }} />
       )}
     </div>
   )

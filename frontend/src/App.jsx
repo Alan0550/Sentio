@@ -13,6 +13,28 @@ import AlertsPanel from './components/AlertsPanel'
 import AlertsConfig from './components/AlertsConfig'
 import { analyzeFeedback, getUrgents, getAlerts } from './services/api'
 
+const ANALYZE_MESSAGES = [
+  'Analizando el feedback...',
+  'Detectando aspectos clave...',
+  'Evaluando riesgo de churn...',
+  'Generando recomendación...',
+]
+
+function AnalyzingSpinner() {
+  const [msgIdx, setMsgIdx] = useState(0)
+  useEffect(() => {
+    const t = setInterval(() => setMsgIdx(i => (i + 1) % ANALYZE_MESSAGES.length), 3000)
+    return () => clearInterval(t)
+  }, [])
+  return (
+    <div className="flex flex-col items-center justify-center py-24 gap-4">
+      <div className="w-12 h-12 border-4 rounded-full animate-spin"
+        style={{ borderColor: '#E2E8F0', borderTopColor: '#6366F1' }} />
+      <p className="text-slate-500 text-sm font-medium transition-all">{ANALYZE_MESSAGES[msgIdx]}</p>
+    </div>
+  )
+}
+
 export default function App() {
   const [view, setView]               = useState('home')
   const [viewParams, setViewParams]   = useState({})
@@ -62,7 +84,7 @@ export default function App() {
         unreadAlertsCount={unreadAlertsCount}
       />
 
-      <main className="max-w-4xl mx-auto px-4 py-8">
+      <main className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
 
         {view === 'home' && <Home onNavigate={navigate} />}
 
@@ -115,13 +137,7 @@ export default function App() {
         {view === 'analyzer' && (
           <>
             {!result && !loading && <FeedbackForm onSubmit={handleAnalyze} error={error} />}
-            {loading && (
-              <div className="flex flex-col items-center justify-center py-24 gap-4">
-                <div className="w-12 h-12 border-4 rounded-full animate-spin"
-                  style={{ borderColor: '#E2E8F0', borderTopColor: '#6366F1' }} />
-                <p className="text-slate-500 text-sm font-medium">Analizando con IA...</p>
-              </div>
-            )}
+            {loading && <AnalyzingSpinner />}
             {result && (
               <AnalysisResult result={result} inputText={inputText}
                 onReset={() => { setResult(null); setError(null); setInputText('') }} />

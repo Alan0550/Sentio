@@ -7,6 +7,7 @@ import { getDashboard, comparePeriods, getChannelBreakdown, getUrgentMetrics,
          getBenchmark, getAlerts } from '../services/api'
 import BenchmarkCard from './BenchmarkCard'
 import ExportButton  from './ExportButton'
+import ErrorBanner   from './ErrorBanner'
 
 const CANALES = ['Todos', 'encuesta', 'chat', 'reseña', 'email', 'manual', 'csv_upload']
 
@@ -212,7 +213,7 @@ export default function Dashboard({ onNavigateAlerts }) {
     .sort((a, b) => a.nps_score - b.nps_score)[0]
 
   return (
-    <div className="space-y-6">
+    <div className="max-w-6xl mx-auto space-y-6">
 
       {/* Header */}
       <div className="flex items-start justify-between gap-4 flex-wrap">
@@ -244,12 +245,7 @@ export default function Dashboard({ onNavigateAlerts }) {
         </div>
       </div>
 
-      {error && (
-        <div className="bg-red-50 border border-red-200 rounded-xl px-4 py-3 flex items-center justify-between">
-          <p className="text-sm text-red-600">{error}</p>
-          <button onClick={load} className="text-xs text-red-500 underline">Reintentar</button>
-        </div>
-      )}
+      {error && <ErrorBanner message={error} onRetry={load} />}
 
       {/* Selector de período + canal */}
       <div className="bg-white rounded-2xl border border-slate-200 p-4 space-y-4">
@@ -386,7 +382,7 @@ export default function Dashboard({ onNavigateAlerts }) {
             </thead>
             <tbody>
               {current.top_aspects.map((a, i) => (
-                <tr key={i} className="border-b border-slate-50 hover:bg-slate-50">
+                <tr key={i} className="border-b border-slate-50 hover:bg-slate-100 transition-colors" style={{ backgroundColor: i % 2 === 0 ? '#F8FAFC' : '#FFFFFF' }}>
                   <td className="px-5 py-2.5 font-medium text-slate-700 capitalize">{a.aspect}</td>
                   <td className="px-3 py-2.5 text-center text-slate-600">{a.total_mentions}</td>
                   <td className="px-3 py-2.5 text-center font-semibold" style={{ color: '#EF4444' }}>{a.negative_pct}%</td>

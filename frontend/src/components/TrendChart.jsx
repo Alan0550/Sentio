@@ -2,8 +2,8 @@ import { useState } from 'react'
 import { formatPeriod } from './PeriodSelector'
 
 const W = 600
-const H = 220
-const PAD = { top: 20, right: 20, bottom: 36, left: 44 }
+const H = 280
+const PAD = { top: 24, right: 24, bottom: 40, left: 48 }
 
 export default function TrendChart({ data = [] }) {
   const [tooltip, setTooltip] = useState(null)
@@ -65,16 +65,22 @@ export default function TrendChart({ data = [] }) {
           const x = xPos(i)
           const hasData = d.nps_score !== null && d.nps_score !== undefined
           const y = hasData ? yPos(d.nps_score) : yZero
+          const isLast = i === data.length - 1
           return (
             <g key={i}
               onMouseEnter={() => setTooltip({ x, y: hasData ? y : PAD.top + innerH / 2, d })}
               style={{ cursor: 'pointer' }}
             >
+              {/* Anillo exterior para el punto actual */}
+              {isLast && hasData && (
+                <circle cx={x} cy={y} r={11}
+                  fill="rgba(99,102,241,0.15)" stroke="none" />
+              )}
               {/* Punto */}
-              <circle cx={x} cy={hasData ? y : yZero} r={5}
+              <circle cx={x} cy={hasData ? y : yZero} r={isLast && hasData ? 7 : 5}
                 fill={hasData ? "#fff" : "transparent"}
                 stroke={hasData ? "#6366F1" : "#CBD5E1"}
-                strokeWidth={hasData ? 2 : 1.5}
+                strokeWidth={hasData ? (isLast ? 2.5 : 2) : 1.5}
                 strokeDasharray={hasData ? "0" : "3,2"}
               />
               {/* Label eje X */}
