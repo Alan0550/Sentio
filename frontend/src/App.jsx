@@ -9,22 +9,27 @@ import BatchResult from './components/BatchResult'
 import UrgentBoard from './components/UrgentBoard'
 import CustomerSearch from './components/CustomerSearch'
 import CustomerProfile from './components/CustomerProfile'
-import { analyzeFeedback, getUrgents } from './services/api'
+import AlertsPanel from './components/AlertsPanel'
+import AlertsConfig from './components/AlertsConfig'
+import { analyzeFeedback, getUrgents, getAlerts } from './services/api'
 
 export default function App() {
-  const [view, setView]             = useState('home')
-  const [viewParams, setViewParams] = useState({})
-  const [loading, setLoading]       = useState(false)
-  const [result, setResult]         = useState(null)
-  const [error, setError]           = useState(null)
-  const [inputText, setInputText]   = useState('')
+  const [view, setView]               = useState('home')
+  const [viewParams, setViewParams]   = useState({})
+  const [loading, setLoading]         = useState(false)
+  const [result, setResult]           = useState(null)
+  const [error, setError]             = useState(null)
+  const [inputText, setInputText]     = useState('')
   const [batchResult, setBatchResult] = useState(null)
-  const [pendingCount, setPendingCount] = useState(0)
+  const [pendingCount, setPendingCount]         = useState(0)
+  const [unreadAlertsCount, setUnreadAlertsCount] = useState(0)
 
-  // Cargar conteo de urgentes pendientes al iniciar
   useEffect(() => {
     getUrgents('default', null, 'pendiente')
       .then(res => setPendingCount(res.total || 0))
+      .catch(() => {})
+    getAlerts('default', true)
+      .then(res => setUnreadAlertsCount(res.unread_count || 0))
       .catch(() => {})
   }, [])
 
@@ -50,13 +55,20 @@ export default function App() {
 
   return (
     <div className="min-h-screen" style={{ backgroundColor: '#F8FAFC' }}>
-      <Header view={view} onChangeView={navigate} pendingCount={pendingCount} />
+      <Header
+        view={view}
+        onChangeView={navigate}
+        pendingCount={pendingCount}
+        unreadAlertsCount={unreadAlertsCount}
+      />
 
       <main className="max-w-4xl mx-auto px-4 py-8">
 
         {view === 'home' && <Home onNavigate={navigate} />}
 
-        {view === 'dashboard' && <Dashboard />}
+        {view === 'dashboard' && (
+          <Dashboard onNavigateAlerts={() => navigate('alerts')} />
+        )}
 
         {view === 'urgents' && (
           <UrgentBoard
@@ -77,6 +89,17 @@ export default function App() {
             onBack={() => navigate('customers')}
             onNavigate={navigate}
           />
+        )}
+
+        {view === 'alerts' && (
+          <AlertsPanel
+            onNavigateConfig={() => navigate('alerts-config')}
+            onUnreadCountChange={setUnreadAlertsCount}
+          />
+        )}
+
+        {view === 'alerts-config' && (
+          <AlertsConfig onBack={() => navigate('alerts')} />
         )}
 
         {view === 'csv' && <CsvUploader onResult={data => { setBatchResult(data); setView('csv-result') }} />}

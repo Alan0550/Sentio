@@ -29,13 +29,18 @@ from services.urgent_manager  import (get_all_urgents, update_urgent,
                                       get_resolution_metrics)
 from services.customer_manager import (get_customer_history, get_customer_summary,
                                        get_customer_list)
+from services.benchmark       import get_benchmark
+from services.alert_manager   import (get_alert_configs, save_alert_config,
+                                      delete_alert_config, get_triggered_alerts,
+                                      mark_alert_read, mark_all_alerts_read,
+                                      evaluate_alerts)
 
 
 HEADERS = {
     "Content-Type":                 "application/json",
     "Access-Control-Allow-Origin":  "*",
     "Access-Control-Allow-Headers": "Content-Type",
-    "Access-Control-Allow-Methods": "POST,GET,PATCH,OPTIONS",
+    "Access-Control-Allow-Methods": "POST,GET,PATCH,DELETE,OPTIONS",
 }
 
 
@@ -89,6 +94,26 @@ def lambda_handler(event, context):
         cid = (event.get("pathParameters") or {}).get("customer_id") or path.split("/customers/")[-1]
         return _handle_get_customer_history(event, cid)
 
+    if path == "/benchmark" and method == "GET":
+        return _handle_benchmark(event)
+
+    if path == "/alerts/config" and method == "GET":
+        return _handle_get_alert_configs(event)
+
+    if path == "/alerts/config" and method == "POST":
+        return _handle_create_alert_config(event)
+
+    if path.startswith("/alerts/config/") and method == "DELETE":
+        cid = (event.get("pathParameters") or {}).get("config_id") or path.split("/alerts/config/")[-1]
+        return _handle_delete_alert_config(event, cid)
+
+    if path == "/alerts" and method == "GET":
+        return _handle_get_alerts(event)
+
+    if path.endswith("/read") and path.startswith("/alerts/") and method == "PATCH":
+        aid = (event.get("pathParameters") or {}).get("alert_id") or path.split("/alerts/")[-1].replace("/read", "")
+        return _handle_mark_alert_read(event, aid)
+
     return _handle_analyze(event)
 
 
@@ -120,6 +145,23 @@ def _handle_analyze(event):
 
     analysis_id  = save_analysis(user_input, result)
     result["id"] = analysis_id
+
+    # Evaluar alertas en background — nunca falla el análisis
+    try:
+        from datetime import datetime, timezone
+        from services.aggregator import get_period_metrics
+        cur_period   = datetime.now(timezone.utc).strftime("%Y-%m")
+        pm           = get_period_metrics(org_id, cur_period)
+        current_metrics = {
+            "nps_score":          pm.get("nps_score"),
+            "previous_nps_score": None,
+            "urgent_count_today": pm.get("urgent_count", 0),
+            "high_churn_count":   pm.get("high_churn_count", 0),
+            "aspects":            pm.get("top_aspects", []),
+        }
+        evaluate_alerts(org_id, cur_period, current_metrics)
+    except Exception as e:
+        print(f"[analyze] Error evaluando alertas: {e}")
 
     return {
         "statusCode": 200,
@@ -399,6 +441,68 @@ def _handle_get_customer_summary(event, customer_id: str):
     data   = get_customer_summary(org_id, customer_id)
     code   = 200 if data.get("found", False) else 404
     return {"statusCode": code, "headers": HEADERS, "body": _dumps(data)}
+
+
+def _handle_benchmark(event):
+    params = event.get("queryStringParameters") or {}
+    org_id = params.get("org_id", "default")
+    return {"statusCode": 200, "headers": HEADERS, "body": _dumps(get_benchmark(org_id))}
+
+
+def _handle_get_alert_configs(event):
+    params = event.get("queryStringParameters") or {}
+    org_id = params.get("org_id", "default")
+    data   = get_alert_configs(org_id)
+    return {"statusCode": 200, "headers": HEADERS, "body": _dumps({"configs": data, "org_id": org_id})}
+
+
+def _handle_create_alert_config(event):
+    try:
+        body = json.loads(event.get("body") or "{}")
+    except json.JSONDecodeError:
+        return _error(400, "Body inválido.")
+    org_id      = body.get("org_id", "default")
+    alert_type  = body.get("type", "")
+    threshold   = body.get("threshold", 0)
+    aspect_name = body.get("aspect_name") or None
+    result = save_alert_config(org_id, alert_type, float(threshold), aspect_name)
+    if "error" in result:
+        return _error(400, result["error"])
+    return {"statusCode": 201, "headers": HEADERS, "body": _dumps(result)}
+
+
+def _handle_delete_alert_config(event, config_id: str):
+    params = event.get("queryStringParameters") or {}
+    org_id = params.get("org_id", "default")
+    ok     = delete_alert_config(org_id, config_id)
+    if not ok:
+        return _error(404, "Configuración no encontrada o sin permiso.")
+    return {"statusCode": 200, "headers": HEADERS, "body": _dumps({"deleted": config_id})}
+
+
+def _handle_get_alerts(event):
+    params      = event.get("queryStringParameters") or {}
+    org_id      = params.get("org_id", "default")
+    unread_only = params.get("unread_only", "false").lower() == "true"
+    data        = get_triggered_alerts(org_id, unread_only)
+    unread_count = sum(1 for a in data if not a.get("read"))
+    return {"statusCode": 200, "headers": HEADERS,
+            "body": _dumps({"alerts": data, "total": len(data), "unread_count": unread_count})}
+
+
+def _handle_mark_alert_read(event, alert_id: str):
+    try:
+        body = json.loads(event.get("body") or "{}")
+    except json.JSONDecodeError:
+        body = {}
+    org_id = body.get("org_id", "default")
+    if alert_id == "all":
+        count = mark_all_alerts_read(org_id)
+        return {"statusCode": 200, "headers": HEADERS, "body": _dumps({"marked": count})}
+    ok = mark_alert_read(org_id, alert_id)
+    if not ok:
+        return _error(404, "Alerta no encontrada o sin permiso.")
+    return {"statusCode": 200, "headers": HEADERS, "body": _dumps({"read": alert_id})}
 
 
 # ── Helpers ───────────────────────────────────────────────────────────────────

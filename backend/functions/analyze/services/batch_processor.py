@@ -147,4 +147,31 @@ def process_batch(rows: list, org_id: str, batch_id: str) -> dict:
 
     save_batch_summary(batch_id, org_id, batch_result)
 
+    # Evaluar alertas — nunca falla el batch
+    try:
+        from datetime import datetime, timezone
+        from services.aggregator    import get_period_metrics
+        from services.alert_manager import evaluate_alerts
+
+        cur_period  = datetime.now(timezone.utc).strftime("%Y-%m")
+        prev_dt     = datetime.now(timezone.utc).replace(day=1)
+        from datetime import timedelta
+        prev_period = (prev_dt - timedelta(days=1)).strftime("%Y-%m")
+
+        pm_cur  = get_period_metrics(org_id, cur_period)
+        pm_prev = get_period_metrics(org_id, prev_period)
+
+        current_metrics = {
+            "nps_score":          pm_cur.get("nps_score"),
+            "previous_nps_score": pm_prev.get("nps_score"),
+            "urgent_count_today": pm_cur.get("urgent_count", 0),
+            "high_churn_count":   pm_cur.get("high_churn_count", 0),
+            "aspects":            pm_cur.get("top_aspects", []),
+        }
+        triggered = evaluate_alerts(org_id, cur_period, current_metrics)
+        if triggered:
+            print(f"[batch] {len(triggered)} alertas disparadas")
+    except Exception as e:
+        print(f"[batch] Error evaluando alertas: {e}")
+
     return batch_result

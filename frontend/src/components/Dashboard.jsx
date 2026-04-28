@@ -3,7 +3,10 @@ import { RefreshCw, AlertTriangle, TrendingDown, Users, BarChart2, GitCompare } 
 import PeriodSelector, { formatPeriod } from './PeriodSelector'
 import TrendChart from './TrendChart'
 import AspectEvolution from './AspectEvolution'
-import { getDashboard, comparePeriods, getChannelBreakdown, getUrgentMetrics } from '../services/api'
+import { getDashboard, comparePeriods, getChannelBreakdown, getUrgentMetrics,
+         getBenchmark, getAlerts } from '../services/api'
+import BenchmarkCard from './BenchmarkCard'
+import ExportButton  from './ExportButton'
 
 const CANALES = ['Todos', 'encuesta', 'chat', 'reseña', 'email', 'manual', 'csv_upload']
 
@@ -133,7 +136,7 @@ function SkeletonCard() {
 
 // ── Componente principal ──────────────────────────────────────────────────────
 
-export default function Dashboard() {
+export default function Dashboard({ onNavigateAlerts }) {
   const periods6          = getLast6Months()
   const [orgId, setOrgId]         = useState('default')
   const [selPeriod, setSelPeriod] = useState(currentPeriod())
@@ -141,6 +144,8 @@ export default function Dashboard() {
   const [trendData, setTrendData] = useState([])
   const [breakdown, setBreakdown]       = useState(null)
   const [resMetrics, setResMetrics]     = useState(null)
+  const [benchmark, setBenchmark]       = useState(null)
+  const [unreadAlerts, setUnreadAlerts] = useState(0)
   const [loading, setLoading]           = useState(true)
   const [error, setError]               = useState(null)
 
@@ -156,14 +161,18 @@ export default function Dashboard() {
   const load = useCallback(async () => {
     setLoading(true); setError(null)
     try {
-      const [trendRes, bdRes, rmRes] = await Promise.all([
+      const [trendRes, bdRes, rmRes, bmRes, alertRes] = await Promise.all([
         getDashboard(orgId, null, periods6, canal),
         getChannelBreakdown(orgId, currentPeriod()),
         getUrgentMetrics(orgId, currentPeriod()),
+        getBenchmark(orgId),
+        getAlerts(orgId, true),
       ])
       setTrendData(trendRes.data || [])
       setBreakdown(bdRes)
       setResMetrics(rmRes)
+      setBenchmark(bmRes)
+      setUnreadAlerts(alertRes.unread_count || 0)
     } catch (e) {
       setError(e.message)
     } finally {
@@ -211,11 +220,22 @@ export default function Dashboard() {
           <h2 className="text-xl font-bold text-slate-800">Dashboard</h2>
           <p className="text-sm text-slate-500 mt-0.5">Evolución de la experiencia del cliente</p>
         </div>
-        <div className="flex items-center gap-2">
+        <div className="flex items-center gap-2 flex-wrap">
           <input
             value={orgId} onChange={e => setOrgId(e.target.value)}
             placeholder="Organización"
             className="border border-slate-200 rounded-lg px-3 py-1.5 text-xs text-slate-700 outline-none focus:border-indigo-400 w-32"
+          />
+          {unreadAlerts > 0 && onNavigateAlerts && (
+            <button onClick={onNavigateAlerts}
+              className="flex items-center gap-1.5 text-xs font-medium px-3 py-1.5 rounded-lg text-white"
+              style={{ backgroundColor: '#EF4444' }}>
+              🔴 {unreadAlerts} alertas
+            </button>
+          )}
+          <ExportButton
+            label="Exportar PDF"
+            data={{ dashboard: current, benchmark, urgents: [], org_id: orgId, period: selPeriod }}
           />
           <button onClick={load}
             className="flex items-center gap-1.5 text-xs text-slate-500 hover:text-slate-700 border border-slate-200 rounded-lg px-3 py-1.5 transition-colors">
@@ -338,6 +358,9 @@ export default function Dashboard() {
           </div>
         </div>
       )}
+
+      {/* Benchmark histórico */}
+      {!loading && benchmark && <BenchmarkCard benchmark={benchmark} />}
 
       {/* Desglose por canal */}
       {!loading && breakdown?.channels?.length >= 2 && selCanal === 'Todos' && (

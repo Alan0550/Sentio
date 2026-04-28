@@ -1,6 +1,7 @@
 import { useState, useEffect } from 'react'
 import { BarChart2, Upload, FlaskConical, AlertTriangle, TrendingDown, CheckCircle } from 'lucide-react'
-import { getHomeSummary } from '../services/api'
+import { getHomeSummary, getBenchmark, getAlerts } from '../services/api'
+import BenchmarkCard from './BenchmarkCard'
 import { formatPeriod } from './PeriodSelector'
 
 const CHURN_COLOR = { alto: '#EF4444', medio: '#F97316', bajo: '#10B981' }
@@ -83,15 +84,19 @@ function SkeletonCard() {
 }
 
 export default function Home({ onNavigate }) {
-  const [data, setData]     = useState(null)
-  const [loading, setLoading] = useState(true)
-  const [error, setError]   = useState(null)
+  const [data, setData]         = useState(null)
+  const [loading, setLoading]   = useState(true)
+  const [error, setError]       = useState(null)
+  const [benchmark, setBenchmark] = useState(null)
+  const [unreadAlerts, setUnreadAlerts] = useState(0)
 
   useEffect(() => {
     getHomeSummary()
       .then(setData)
       .catch(e => setError(e.message))
       .finally(() => setLoading(false))
+    getBenchmark().then(setBenchmark).catch(() => {})
+    getAlerts('default', true).then(r => setUnreadAlerts(r.unread_count || 0)).catch(() => {})
   }, [])
 
   const cur = data?.current || {}
@@ -166,6 +171,23 @@ export default function Home({ onNavigate }) {
             <p className="text-3xl font-black" style={{ color: '#F97316' }}>{cur.high_churn_count ?? 0}</p>
             <DeltaBadge change={del.churn_change} label="vs ant." invert />
           </div>
+        </div>
+      )}
+
+      {/* Benchmark compacto */}
+      {!loading && benchmark && <BenchmarkCard benchmark={benchmark} compact />}
+
+      {/* Aviso alertas no leídas */}
+      {!loading && unreadAlerts > 0 && (
+        <div className="flex items-center gap-3 px-1">
+          <span className="w-2 h-2 rounded-full animate-pulse" style={{ backgroundColor: '#EF4444' }} />
+          <span className="text-xs text-slate-500">
+            Tenés <strong style={{ color: '#EF4444' }}>{unreadAlerts} alertas</strong> sin leer
+          </span>
+          <button onClick={() => onNavigate('alerts')}
+            className="text-xs text-indigo-600 font-medium hover:text-indigo-800 transition-colors">
+            Ver alertas →
+          </button>
         </div>
       )}
 

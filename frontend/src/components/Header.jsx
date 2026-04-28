@@ -1,17 +1,19 @@
-import { Home, BarChart2, Upload, FlaskConical, AlertTriangle, Users } from 'lucide-react'
+import { Home, BarChart2, Upload, FlaskConical, AlertTriangle, Users, Bell } from 'lucide-react'
 
 const NAV = [
-  { key: 'home',      label: 'Inicio',    Icon: Home          },
-  { key: 'dashboard', label: 'Dashboard', Icon: BarChart2     },
-  { key: 'urgents',   label: 'Urgentes',  Icon: AlertTriangle },
-  { key: 'customers', label: 'Clientes',  Icon: Users         },
-  { key: 'csv',       label: 'Carga CSV', Icon: Upload        },
-  { key: 'analyzer',  label: 'Demo',      Icon: FlaskConical  },
+  { key: 'home',      label: 'Inicio',    Icon: Home,          badge: null        },
+  { key: 'dashboard', label: 'Dashboard', Icon: BarChart2,     badge: null        },
+  { key: 'urgents',   label: 'Urgentes',  Icon: AlertTriangle, badge: 'pending'   },
+  { key: 'customers', label: 'Clientes',  Icon: Users,         badge: null        },
+  { key: 'alerts',    label: 'Alertas',   Icon: Bell,          badge: 'alerts'    },
+  { key: 'csv',       label: 'Carga CSV', Icon: Upload,        badge: null        },
+  { key: 'analyzer',  label: 'Demo',      Icon: FlaskConical,  badge: null        },
 ]
 
-export default function Header({ view, onChangeView, pendingCount = 0 }) {
+export default function Header({ view, onChangeView, pendingCount = 0, unreadAlertsCount = 0 }) {
   const activeKey = ['csv', 'csv-result'].includes(view) ? 'csv'
     : view === 'customer-profile' ? 'customers'
+    : ['alerts', 'alerts-config'].includes(view) ? 'alerts'
     : view
 
   return (
@@ -47,11 +49,15 @@ export default function Header({ view, onChangeView, pendingCount = 0 }) {
               <Icon size={15} />
               <span className="hidden sm:inline">{label}</span>
               {key === 'urgents' && pendingCount > 0 && (
-                <span
-                  className="absolute -top-1 -right-1 min-w-4 h-4 rounded-full text-white font-bold flex items-center justify-center"
-                  style={{ backgroundColor: '#EF4444', fontSize: '10px', padding: '0 3px' }}
-                >
+                <span className="absolute -top-1 -right-1 min-w-4 h-4 rounded-full text-white font-bold flex items-center justify-center"
+                  style={{ backgroundColor: '#EF4444', fontSize: '10px', padding: '0 3px' }}>
                   {pendingCount > 99 ? '99+' : pendingCount}
+                </span>
+              )}
+              {key === 'alerts' && unreadAlertsCount > 0 && (
+                <span className="absolute -top-1 -right-1 min-w-4 h-4 rounded-full text-white font-bold flex items-center justify-center"
+                  style={{ backgroundColor: '#EF4444', fontSize: '10px', padding: '0 3px' }}>
+                  {unreadAlertsCount > 99 ? '99+' : unreadAlertsCount}
                 </span>
               )}
             </button>

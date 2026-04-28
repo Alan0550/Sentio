@@ -34,7 +34,7 @@ Resources:
         - multipart/form-data
         - application/octet-stream
       Cors:
-        AllowMethods: "'POST,GET,PATCH,OPTIONS'"
+        AllowMethods: "'POST,GET,PATCH,DELETE,OPTIONS'"
         AllowHeaders: "'Content-Type'"
         AllowOrigin: "'*'"
 
@@ -77,6 +77,7 @@ Resources:
                 - dynamodb:Query
                 - dynamodb:Scan
                 - dynamodb:UpdateItem
+                - dynamodb:DeleteItem
               Resource: !GetAtt AnalysisTable.Arn
       Environment:
         Variables:
@@ -136,6 +137,42 @@ Resources:
           Properties:
             RestApiId: !Ref SentioApi
             Path: /urgents/{analysis_id}
+            Method: PATCH
+        GetBenchmark:
+          Type: Api
+          Properties:
+            RestApiId: !Ref SentioApi
+            Path: /benchmark
+            Method: GET
+        GetAlertConfigs:
+          Type: Api
+          Properties:
+            RestApiId: !Ref SentioApi
+            Path: /alerts/config
+            Method: GET
+        CreateAlertConfig:
+          Type: Api
+          Properties:
+            RestApiId: !Ref SentioApi
+            Path: /alerts/config
+            Method: POST
+        DeleteAlertConfig:
+          Type: Api
+          Properties:
+            RestApiId: !Ref SentioApi
+            Path: /alerts/config/{config_id}
+            Method: DELETE
+        GetAlerts:
+          Type: Api
+          Properties:
+            RestApiId: !Ref SentioApi
+            Path: /alerts
+            Method: GET
+        MarkAlertRead:
+          Type: Api
+          Properties:
+            RestApiId: !Ref SentioApi
+            Path: /alerts/{alert_id}/read
             Method: PATCH
         GetCustomers:
           Type: Api

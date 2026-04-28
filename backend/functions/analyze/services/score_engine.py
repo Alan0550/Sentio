@@ -24,7 +24,7 @@ _bedrock = boto3.client(
 
 MODEL_ID = os.environ.get("BEDROCK_MODEL_ID", "us.anthropic.claude-haiku-4-5-20251001-v1:0")
 
-# ── Aspectos por industria ────────────────────────────────────────────────────
+#  Aspectos por industria
 
 ASPECTS_TELCO = [
     "velocidad de internet",

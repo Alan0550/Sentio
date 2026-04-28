@@ -67,6 +67,52 @@ export async function getBatch(batchId) {
   return response.json()
 }
 
+export async function getBenchmark(orgId = 'default') {
+  const response = await fetch(`${API_URL}/benchmark?org_id=${encodeURIComponent(orgId)}`)
+  if (!response.ok) throw new Error('Error al cargar benchmark')
+  return response.json()
+}
+
+export async function getAlertConfigs(orgId = 'default') {
+  const response = await fetch(`${API_URL}/alerts/config?org_id=${encodeURIComponent(orgId)}`)
+  if (!response.ok) throw new Error('Error al cargar configuraciones')
+  return response.json()
+}
+
+export async function createAlertConfig(orgId = 'default', type, threshold, aspectName = null) {
+  const response = await fetch(`${API_URL}/alerts/config`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ org_id: orgId, type, threshold, aspect_name: aspectName }),
+  })
+  if (!response.ok) throw new Error('Error al crear configuración')
+  return response.json()
+}
+
+export async function deleteAlertConfig(configId, orgId = 'default') {
+  const response = await fetch(`${API_URL}/alerts/config/${configId}?org_id=${encodeURIComponent(orgId)}`, {
+    method: 'DELETE',
+  })
+  if (!response.ok) throw new Error('Error al eliminar configuración')
+  return response.json()
+}
+
+export async function getAlerts(orgId = 'default', unreadOnly = false) {
+  const response = await fetch(`${API_URL}/alerts?org_id=${encodeURIComponent(orgId)}&unread_only=${unreadOnly}`)
+  if (!response.ok) throw new Error('Error al cargar alertas')
+  return response.json()
+}
+
+export async function markAlertRead(alertId, orgId = 'default') {
+  const response = await fetch(`${API_URL}/alerts/${alertId}/read`, {
+    method: 'PATCH',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ org_id: orgId }),
+  })
+  if (!response.ok) throw new Error('Error al marcar alerta')
+  return response.json()
+}
+
 export async function getCustomers(orgId = 'default', period = null, sortBy = 'interactions') {
   let url = `${API_URL}/customers?org_id=${encodeURIComponent(orgId)}&sort_by=${sortBy}`
   if (period) url += `&period=${period}`
