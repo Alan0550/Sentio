@@ -1,5 +1,6 @@
 import { useState } from 'react'
 import Header from './components/Header'
+import Home from './components/Home'
 import FeedbackForm from './components/FeedbackForm'
 import AnalysisResult from './components/AnalysisResult'
 import Dashboard from './components/Dashboard'
@@ -8,7 +9,7 @@ import BatchResult from './components/BatchResult'
 import { analyzeFeedback } from './services/api'
 
 export default function App() {
-  const [view, setView]             = useState('analyzer')
+  const [view, setView]             = useState('home')
   const [loading, setLoading]       = useState(false)
   const [result, setResult]         = useState(null)
   const [error, setError]           = useState(null)
@@ -58,6 +59,10 @@ export default function App() {
 
       <main className="max-w-4xl mx-auto px-4 py-8">
 
+        {view === 'home' && (
+          <Home onNavigate={handleChangeView} />
+        )}
+
         {view === 'dashboard' && <Dashboard />}
 
         {view === 'csv' && (
@@ -77,7 +82,6 @@ export default function App() {
             {!result && !loading && (
               <FeedbackForm onSubmit={handleAnalyze} error={error} />
             )}
-
             {loading && (
               <div className="flex flex-col items-center justify-center py-24 gap-4">
                 <div
@@ -87,7 +91,6 @@ export default function App() {
                 <p className="text-slate-500 text-sm font-medium">Analizando con IA...</p>
               </div>
             )}
-
             {result && (
               <AnalysisResult result={result} inputText={inputText} onReset={handleReset} />
             )}

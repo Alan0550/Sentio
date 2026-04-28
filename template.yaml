@@ -68,11 +68,6 @@ Resources:
         - Statement:
             - Effect: Allow
               Action:
-                - comprehend:DetectSentiment
-                - comprehend:DetectEntities
-              Resource: "*"
-            - Effect: Allow
-              Action:
                 - bedrock:InvokeModel
               Resource: "*"
             - Effect: Allow
@@ -116,6 +111,12 @@ Resources:
           Properties:
             RestApiId: !Ref SentioApi
             Path: /batch/{batch_id}
+            Method: GET
+        GetHome:
+          Type: Api
+          Properties:
+            RestApiId: !Ref SentioApi
+            Path: /home
             Method: GET
         GetDashboard:
           Type: Api

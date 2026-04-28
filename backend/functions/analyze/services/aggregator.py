@@ -101,21 +101,138 @@ def _compute_metrics(items: list, period: str, org_id: str) -> dict:
     }
 
 
-def get_period_metrics(org_id: str, period: str) -> dict:
-    """Devuelve las métricas de un período específico (YYYY-MM)."""
-    print(f"[aggregator] get_period_metrics org={org_id} period={period}")
+def get_period_metrics(org_id: str, period: str, canal: str = None) -> dict:
+    """Devuelve las métricas de un período específico (YYYY-MM), opcionalmente filtrado por canal."""
+    print(f"[aggregator] get_period_metrics org={org_id} period={period} canal={canal}")
     items = get_analyses_by_period(org_id, period)
+    if canal:
+        items = [i for i in items if i.get("source") == canal]
     return _compute_metrics(items, period, org_id)
 
 
-def get_trend(org_id: str, periods: list) -> list:
+def get_trend(org_id: str, periods: list, canal: str = None) -> list:
     """Devuelve métricas de múltiples períodos, ordenados ascendentemente."""
     periods_sorted = sorted(set(periods))
     result = []
     for p in periods_sorted:
-        metrics = get_period_metrics(org_id, p)
+        metrics = get_period_metrics(org_id, p, canal=canal)
         result.append(metrics)
     return result
+
+
+def get_channel_breakdown(org_id: str, period: str) -> dict:
+    """Calcula NPS y métricas desglosadas por canal para un período."""
+    print(f"[aggregator] get_channel_breakdown org={org_id} period={period}")
+    items = get_analyses_by_period(org_id, period)
+
+    canal_map = {}
+    for item in items:
+        canal = item.get("source", "manual")
+        if canal not in canal_map:
+            canal_map[canal] = []
+        canal_map[canal].append(item)
+
+    channels = []
+    for canal, canal_items in canal_map.items():
+        n          = len(canal_items)
+        promoters  = sum(1 for i in canal_items if i.get("nps_classification") == "promotor")
+        detractors = sum(1 for i in canal_items if i.get("nps_classification") == "detractor")
+        nps_score  = round(((promoters - detractors) / n) * 100)
+        channels.append({
+            "canal":           canal,
+            "total":           n,
+            "nps_score":       nps_score,
+            "promoters_pct":   round(promoters  / n * 100),
+            "detractors_pct":  round(detractors / n * 100),
+            "urgent_count":    sum(1 for i in canal_items if i.get("urgency") is True),
+            "high_churn_count": sum(1 for i in canal_items if i.get("churn_risk") == "alto"),
+        })
+
+    channels.sort(key=lambda x: x["total"], reverse=True)
+    return {"period": period, "channels": channels}
+
+
+def get_home_summary(org_id: str) -> dict:
+    """Resumen ejecutivo para la pantalla Home: período actual vs anterior."""
+    from datetime import datetime, timezone, timedelta
+
+    now     = datetime.now(timezone.utc)
+    cur_p   = now.strftime("%Y-%m")
+    prev_dt = (now.replace(day=1) - timedelta(days=1))
+    prev_p  = prev_dt.strftime("%Y-%m")
+
+    current_items  = get_analyses_by_period(org_id, cur_p)
+    previous_items = get_analyses_by_period(org_id, prev_p)
+
+    def _summary_from(items):
+        n = len(items)
+        if n == 0:
+            return {"nps_score": None, "total_analyzed": 0, "urgent_count": 0,
+                    "high_churn_count": 0, "promoters_pct": None, "detractors_pct": None}
+        prom = sum(1 for i in items if i.get("nps_classification") == "promotor")
+        det  = sum(1 for i in items if i.get("nps_classification") == "detractor")
+        return {
+            "nps_score":         round(((prom - det) / n) * 100),
+            "total_analyzed":    n,
+            "urgent_count":      sum(1 for i in items if i.get("urgency") is True),
+            "high_churn_count":  sum(1 for i in items if i.get("churn_risk") == "alto"),
+            "promoters_pct":     round(prom / n * 100, 1),
+            "detractors_pct":    round(det  / n * 100, 1),
+        }
+
+    cur_m  = _summary_from(current_items)
+    prev_m = _summary_from(previous_items)
+
+    def _delta(a, b):
+        if a is None or b is None:
+            return None
+        return b - a
+
+    has_data = cur_m["total_analyzed"] > 0
+
+    # Top urgentes — 5 más recientes del período actual
+    urgents = sorted(
+        [i for i in current_items if i.get("urgency") is True],
+        key=lambda x: x.get("timestamp", ""),
+        reverse=True,
+    )[:5]
+    top_urgent = [
+        {
+            "customer_id":   i.get("customer_id") or "—",
+            "input_preview": (i.get("input_preview") or i.get("input") or "")[:100],
+            "urgency_reason": i.get("urgency_reason"),
+            "churn_risk":    i.get("churn_risk", "medio"),
+            "timestamp":     i.get("timestamp", ""),
+        }
+        for i in urgents
+    ]
+
+    # Aspectos críticos — negative_pct >= 70% y >= 3 menciones
+    metrics_cur    = _compute_metrics(current_items, cur_p, org_id)
+    critical_aspects = [
+        {"aspect": a["aspect"], "negative_pct": a["negative_pct"], "total_mentions": a["total_mentions"]}
+        for a in metrics_cur.get("top_aspects", [])
+        if a["negative_pct"] >= 70 and a["total_mentions"] >= 3
+    ]
+    critical_aspects.sort(key=lambda x: x["negative_pct"], reverse=True)
+    critical_aspects = critical_aspects[:5]
+
+    return {
+        "org_id":          org_id,
+        "current_period":  cur_p,
+        "previous_period": prev_p,
+        "current":         cur_m,
+        "previous":        prev_m,
+        "deltas": {
+            "nps_change":    _delta(prev_m["nps_score"],         cur_m["nps_score"]),
+            "total_change":  _delta(prev_m["total_analyzed"],    cur_m["total_analyzed"]),
+            "urgent_change": _delta(prev_m["urgent_count"],      cur_m["urgent_count"]),
+            "churn_change":  _delta(prev_m["high_churn_count"],  cur_m["high_churn_count"]),
+        },
+        "top_urgent":        top_urgent,
+        "critical_aspects":  critical_aspects,
+        "has_data":          has_data,
+    }
 
 
 def compare_periods(org_id: str, period_a: str, period_b: str) -> dict:

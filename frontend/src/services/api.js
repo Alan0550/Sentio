@@ -67,10 +67,25 @@ export async function getBatch(batchId) {
   return response.json()
 }
 
-export async function getDashboard(orgId = 'default', period = null, periods = null) {
+export async function getHomeSummary(orgId = 'default') {
+  const response = await fetch(`${API_URL}/home?org_id=${encodeURIComponent(orgId)}`)
+  if (!response.ok) throw new Error('Error al cargar el resumen')
+  return response.json()
+}
+
+export async function getChannelBreakdown(orgId = 'default', period) {
+  const response = await fetch(
+    `${API_URL}/dashboard?org_id=${encodeURIComponent(orgId)}&period=${period}&breakdown=true`
+  )
+  if (!response.ok) throw new Error('Error al cargar el desglose por canal')
+  return response.json()
+}
+
+export async function getDashboard(orgId = 'default', period = null, periods = null, canal = null) {
   let url = `${API_URL}/dashboard?org_id=${encodeURIComponent(orgId)}`
   if (period)  url += `&period=${period}`
   if (periods) url += `&periods=${Array.isArray(periods) ? periods.join(',') : periods}`
+  if (canal)   url += `&canal=${encodeURIComponent(canal)}`
   const response = await fetch(url)
   if (!response.ok) throw new Error('Error al cargar el dashboard')
   return response.json()

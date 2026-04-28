@@ -19,12 +19,12 @@ class _JSONEncoder(json.JSONEncoder):
 def _dumps(obj, **_):
     return json.dumps(obj, ensure_ascii=False, cls=_JSONEncoder)
 
-from services.text_analyzer  import analyze_text
 from services.score_engine   import analyze_feedback
 from services.history        import save_analysis, get_recent, get_batch_summary
 from services.csv_processor  import parse_csv
 from services.batch_processor import process_batch
-from services.aggregator     import get_period_metrics, get_trend, compare_periods
+from services.aggregator     import (get_period_metrics, get_trend, compare_periods,
+                                     get_home_summary, get_channel_breakdown)
 
 
 HEADERS = {
@@ -61,6 +61,9 @@ def lambda_handler(event, context):
     if path == "/dashboard" and method == "GET":
         return _handle_dashboard(event)
 
+    if path == "/home" and method == "GET":
+        return _handle_home(event)
+
     return _handle_analyze(event)
 
 
@@ -83,8 +86,7 @@ def _handle_analyze(event):
     if len(user_input) > 5000:
         return _error(400, "El feedback supera el límite de 5000 caracteres.")
 
-    comprehend_result = analyze_text(user_input)
-    result = analyze_feedback(user_input, comprehend_result)
+    result = analyze_feedback(user_input)
 
     result["source"]      = source
     result["customer_id"] = customer_id
@@ -133,8 +135,7 @@ def _handle_batch(event):
             continue
 
         try:
-            comprehend_result = analyze_text(user_input)
-            result = analyze_feedback(user_input, comprehend_result)
+            result = analyze_feedback(user_input)
             result["source"]      = source
             result["customer_id"] = customer_id
             result["org_id"]      = org_id
@@ -233,15 +234,29 @@ def _handle_get_batch(batch_id: str):
     }
 
 
+def _handle_home(event):
+    params = event.get("queryStringParameters") or {}
+    org_id = params.get("org_id", "default")
+    data   = get_home_summary(org_id)
+    return {"statusCode": 200, "headers": HEADERS, "body": _dumps(data)}
+
+
 def _handle_dashboard(event):
     from datetime import datetime, timedelta, timezone
-    params  = event.get("queryStringParameters") or {}
-    org_id  = params.get("org_id", "default")
-    period  = params.get("period")
-    periods = params.get("periods")
+    params    = event.get("queryStringParameters") or {}
+    org_id    = params.get("org_id", "default")
+    period    = params.get("period")
+    periods   = params.get("periods")
+    canal     = params.get("canal") or None
+    breakdown = params.get("breakdown", "").lower() == "true"
+
+    # Desglose por canal
+    if breakdown and period:
+        data = get_channel_breakdown(org_id, period)
+        return {"statusCode": 200, "headers": HEADERS, "body": _dumps(data)}
 
     if period:
-        data = get_period_metrics(org_id, period)
+        data = get_period_metrics(org_id, period, canal=canal)
         return {
             "statusCode": 200, "headers": HEADERS,
             "body": _dumps({"type": "period", "org_id": org_id, "data": data}),
@@ -259,7 +274,7 @@ def _handle_dashboard(event):
                 seen.add(p)
                 period_list.append(p)
 
-    data = get_trend(org_id, period_list)
+    data = get_trend(org_id, period_list, canal=canal)
     return {
         "statusCode": 200, "headers": HEADERS,
         "body": _dumps({"type": "trend", "org_id": org_id, "periods": period_list, "data": data}),

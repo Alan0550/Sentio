@@ -2,6 +2,7 @@
 Motor de análisis — Amazon Bedrock (Claude Haiku).
 Sentio: análisis de feedback empresarial con NPS inferido,
 aspectos por sentimiento y riesgo de churn.
+Sin dependencia de Amazon Comprehend — Bedrock infiere todo directamente.
 """
 
 import os
@@ -26,41 +27,31 @@ MODEL_ID = os.environ.get("BEDROCK_MODEL_ID", "us.anthropic.claude-haiku-4-5-202
 # ── Aspectos por industria ────────────────────────────────────────────────────
 
 ASPECTS_TELCO = [
-    # Calidad del servicio de red — aspectos diferenciados
     "velocidad de internet",
     "estabilidad de la conexión",
     "cobertura de red",
-    # Servicio al cliente
     "atención al cliente",
     "tiempo de espera en soporte",
-    # Facturación y precios
     "precio del plan",
     "facturación",
-    # Servicio técnico
     "instalación",
     "soporte técnico",
-    # Producto digital y cancelación
     "app móvil",
     "cortes de servicio",
     "proceso de cancelación",
 ]
 
 ASPECTS_RETAIL = [
-    # Experiencia de compra
     "precio",
     "variedad de productos",
     "proceso de pago",
-    # Entrega y logística
     "tiempo de entrega",
     "estado del empaque",
-    # Producto
     "calidad del producto",
     "descripción del producto",
-    # Postventa
     "proceso de devolución",
     "proceso de reembolso",
     "servicio postventa",
-    # Canal digital
     "app o sitio web",
     "atención al cliente",
 ]
@@ -104,52 +95,36 @@ def detect_industry(text: str) -> tuple:
 
 # ── Análisis principal ────────────────────────────────────────────────────────
 
-def analyze_feedback(text: str, comprehend_result: dict) -> dict:
+def analyze_feedback(text: str) -> dict:
     """
     Punto de entrada principal.
-    Recibe el texto del feedback y el resultado de Comprehend.
-    Devuelve el análisis completo de Sentio.
+    Recibe el texto del feedback y devuelve el análisis completo de Sentio.
+    Bedrock infiere sentimiento, entidades, NPS, aspectos y churn directamente.
     """
     industry, aspects = detect_industry(text)
-    sentiment = comprehend_result.get("sentiment", {})
-    entities  = comprehend_result.get("entities", [])
-
-    result = _call_bedrock(text, sentiment, entities, aspects, industry)
+    result = _call_bedrock(text, aspects, industry)
     return result
 
 
 # ── Bedrock ───────────────────────────────────────────────────────────────────
 
-def _call_bedrock(text: str, sentiment: dict,
-                  entities: list, aspects: list, industry: str) -> dict:
+def _call_bedrock(text: str, aspects: list, industry: str) -> dict:
     t0 = time.time()
     print(f"[sentio] Llamando a Bedrock — industry={industry}")
     try:
-        result  = _bedrock_request(text, sentiment, entities, aspects, industry)
+        result  = _bedrock_request(text, aspects, industry)
         elapsed = round(time.time() - t0, 2)
         print(f"[sentio] Bedrock OK — {elapsed}s")
         return result
     except Exception as e:
         elapsed = round(time.time() - t0, 2)
         print(f"[sentio] Bedrock FALLÓ ({elapsed}s): {e}")
-        return _fallback(text, sentiment)
+        return _fallback(text)
 
 
-def _bedrock_request(text: str, sentiment: dict,
-                     entities: list, aspects: list, industry: str) -> dict:
-
-    sentiment_label = sentiment.get("Sentiment", "NEUTRAL")
-    scores          = sentiment.get("SentimentScore", {})
-    neg_score       = round(scores.get("Negative", 0) * 100)
-    pos_score       = round(scores.get("Positive", 0) * 100)
-    neu_score       = round(scores.get("Neutral",  0) * 100)
-    mix_score       = round(scores.get("Mixed",    0) * 100)
-
-    entity_names = [e.get("Text", "") for e in entities[:10]]
-    entity_str   = ", ".join(entity_names) if entity_names else "ninguna detectada"
-
-    aspects_str  = "\n".join(f"- {a}" for a in aspects)
-    truncated    = " ".join(text.split()[:800])
+def _bedrock_request(text: str, aspects: list, industry: str) -> dict:
+    aspects_str = "\n".join(f"- {a}" for a in aspects)
+    truncated   = " ".join(text.split()[:800])
 
     prompt = f"""Eres un experto en análisis de experiencia de cliente (CX) y voz del cliente (VoC) para empresas de retail, telco y banca en Latinoamérica.
 Analiza el siguiente feedback de un cliente y devuelve información estructurada con máxima precisión.
@@ -158,11 +133,6 @@ INDUSTRIA DETECTADA: {industry}
 
 FEEDBACK DEL CLIENTE:
 {truncated}
-
-DATOS DE COMPREHEND (contexto adicional, úsalos como referencia):
-- Sentimiento general: {sentiment_label}
-- Negativo: {neg_score}% | Positivo: {pos_score}% | Neutro: {neu_score}% | Mixto: {mix_score}%
-- Entidades detectadas: {entity_str}
 
 ASPECTOS A EVALUAR para industria {industry} (solo incluí los que aparecen explícitamente en el texto):
 {aspects_str}
@@ -210,6 +180,14 @@ CRITERIOS CONFIANZA EN ASPECTOS:
 - confidence 0.5-0.69: inferencia débil, el aspecto podría interpretarse de otra forma.
 - NO incluir aspectos con confidence < 0.5. Si hay duda, no lo incluyas.
 
+SENTIMENT BREAKDOWN — INSTRUCCIÓN IMPORTANTE:
+Estimá los porcentajes de sentimiento basándote en el contenido del texto:
+- "negative": % del texto con tono negativo (0-100)
+- "positive": % del texto con tono positivo (0-100)
+- "neutral": % del texto con tono neutro (0-100)
+- "mixed": % del texto con tono mixto (0-100)
+Los 4 valores deben sumar aproximadamente 100.
+
 ACCIÓN RECOMENDADA — SER ESPECÍFICO Y ACCIONABLE:
 No usar frases genéricas como "contactar al cliente". En cambio:
 - Si hay riesgo de cancelación inmediata: "Llamar al cliente en menos de 2 horas — menciona cancelación esta semana"
@@ -224,10 +202,10 @@ Responde ÚNICAMENTE con este JSON exacto (sin texto antes ni después, sin mark
   "inferred_score": <1-10>,
   "overall_sentiment": "<positivo|negativo|neutro|mixto>",
   "sentiment_breakdown": {{
-    "negative": {neg_score},
-    "positive": {pos_score},
-    "neutral": {neu_score},
-    "mixed": {mix_score}
+    "negative": <0-100>,
+    "positive": <0-100>,
+    "neutral": <0-100>,
+    "mixed": <0-100>
   }},
   "aspects": [
     {{
@@ -293,53 +271,57 @@ def _parse_json(text: str) -> dict:
 
 # ── Fallback ──────────────────────────────────────────────────────────────────
 
-def _fallback(text: str, sentiment: dict) -> dict:
-    label  = sentiment.get("Sentiment", "NEUTRAL")
-    scores = sentiment.get("SentimentScore", {})
-    neg    = scores.get("Negative", 0)
-    pos    = scores.get("Positive", 0)
+def _fallback(text: str) -> dict:
+    """Fallback cuando Bedrock falla — usa heurísticas básicas del texto."""
+    text_lower = text.lower()
+    neg_words = {"pésimo", "terrible", "horrible", "fatal", "malísimo", "cancelar",
+                 "nunca más", "inaceptable", "vergüenza", "fraude", "estafa"}
+    pos_words = {"excelente", "increíble", "perfecto", "genial", "recomiendo",
+                 "encantado", "feliz", "satisfecho", "gracias", "rápido"}
 
-    if pos > 0.6:
+    neg_hits = sum(1 for w in neg_words if w in text_lower)
+    pos_hits = sum(1 for w in pos_words if w in text_lower)
+
+    if pos_hits > neg_hits:
         nps_class = "promotor"
         score     = 9
         churn     = "bajo"
         emotion   = "satisfacción"
         summary   = "El cliente expresa una experiencia positiva."
         action    = "Mantener la calidad del servicio."
-    elif neg > 0.6:
+        neg_pct, pos_pct, neu_pct = 10, 80, 10
+    elif neg_hits > pos_hits:
         nps_class = "detractor"
         score     = 3
         churn     = "alto"
         emotion   = "frustración"
         summary   = "El cliente expresa una experiencia negativa."
         action    = "Contactar al cliente para resolver el problema."
+        neg_pct, pos_pct, neu_pct = 80, 5, 15
     else:
         nps_class = "pasivo"
-        score     = 7
+        score     = 6
         churn     = "medio"
         emotion   = "indiferencia"
-        summary   = "El cliente expresa una experiencia neutral."
+        summary   = "El cliente expresa una experiencia neutral o mixta."
         action    = "Identificar oportunidades de mejora."
-
-    neg_pct = round(neg * 100)
-    pos_pct = round(pos * 100)
-    neu_pct = 100 - neg_pct - pos_pct
+        neg_pct, pos_pct, neu_pct = 30, 30, 40
 
     return {
         "nps_classification": nps_class,
         "inferred_score":     score,
-        "overall_sentiment":  label.lower(),
+        "overall_sentiment":  "positivo" if pos_hits > neg_hits else ("negativo" if neg_hits > pos_hits else "neutro"),
         "sentiment_breakdown": {
             "negative": neg_pct,
             "positive": pos_pct,
-            "neutral":  max(0, neu_pct),
+            "neutral":  neu_pct,
             "mixed":    0,
         },
         "aspects":          [],
         "dominant_emotion": emotion,
         "churn_risk":       churn,
-        "urgency":          neg > 0.8,
-        "urgency_reason":   "Alto nivel de negatividad detectado" if neg > 0.8 else None,
+        "urgency":          "cancel" in text_lower or "denuncia" in text_lower,
+        "urgency_reason":   None,
         "industry":         "general",
         "summary":          summary,
         "recommended_action": action,

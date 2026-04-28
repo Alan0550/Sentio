@@ -3,7 +3,54 @@ import { RefreshCw, AlertTriangle, TrendingDown, Users, BarChart2, GitCompare } 
 import PeriodSelector, { formatPeriod } from './PeriodSelector'
 import TrendChart from './TrendChart'
 import AspectEvolution from './AspectEvolution'
-import { getDashboard, comparePeriods } from '../services/api'
+import { getDashboard, comparePeriods, getChannelBreakdown } from '../services/api'
+
+const CANALES = ['Todos', 'encuesta', 'chat', 'reseña', 'email', 'manual', 'csv_upload']
+
+function npsScoreColor(s) {
+  if (s === null || s === undefined) return '#94A3B8'
+  if (s > 0)   return '#10B981'
+  if (s < -10) return '#EF4444'
+  return '#F59E0B'
+}
+
+function ChannelTable({ channels }) {
+  if (!channels || channels.length < 2) return null
+  return (
+    <div className="bg-white rounded-2xl border border-slate-200 overflow-hidden">
+      <div className="px-5 py-4 border-b border-slate-100">
+        <h3 className="text-sm font-semibold text-slate-700">NPS por canal</h3>
+      </div>
+      <table className="w-full text-xs">
+        <thead>
+          <tr className="text-slate-400 border-b border-slate-100">
+            <th className="px-5 py-2 text-left font-medium">Canal</th>
+            <th className="px-3 py-2 text-center font-medium">Total</th>
+            <th className="px-3 py-2 text-center font-medium">NPS</th>
+            <th className="px-3 py-2 text-center font-medium">Promotores</th>
+            <th className="px-3 py-2 text-center font-medium">Detractores</th>
+            <th className="px-3 py-2 text-center font-medium">Urgentes</th>
+          </tr>
+        </thead>
+        <tbody>
+          {channels.map((c, i) => (
+            <tr key={i} className="border-b border-slate-50 hover:bg-slate-50">
+              <td className="px-5 py-2.5 font-medium text-slate-700 capitalize">{c.canal}</td>
+              <td className="px-3 py-2.5 text-center text-slate-600">{c.total}</td>
+              <td className="px-3 py-2.5 text-center font-bold"
+                style={{ color: npsScoreColor(c.nps_score) }}>
+                {c.nps_score > 0 ? `+${c.nps_score}` : c.nps_score}
+              </td>
+              <td className="px-3 py-2.5 text-center" style={{ color: '#10B981' }}>{c.promoters_pct}%</td>
+              <td className="px-3 py-2.5 text-center" style={{ color: '#EF4444' }}>{c.detractors_pct}%</td>
+              <td className="px-3 py-2.5 text-center text-slate-600">{c.urgent_count}</td>
+            </tr>
+          ))}
+        </tbody>
+      </table>
+    </div>
+  )
+}
 
 // ── Helpers ───────────────────────────────────────────────────────────────────
 
@@ -88,30 +135,38 @@ function SkeletonCard() {
 
 export default function Dashboard() {
   const periods6          = getLast6Months()
-  const [orgId, setOrgId] = useState('default')
-  const [selPeriod, setSelPeriod]   = useState(currentPeriod())
-  const [trendData, setTrendData]   = useState([])
-  const [loading, setLoading]       = useState(true)
-  const [error, setError]           = useState(null)
+  const [orgId, setOrgId]         = useState('default')
+  const [selPeriod, setSelPeriod] = useState(currentPeriod())
+  const [selCanal, setSelCanal]   = useState('Todos')
+  const [trendData, setTrendData] = useState([])
+  const [breakdown, setBreakdown] = useState(null)
+  const [loading, setLoading]     = useState(true)
+  const [error, setError]         = useState(null)
 
   // Comparación
-  const [cmpA, setCmpA]           = useState(periods6[periods6.length - 2] || periods6[0])
-  const [cmpB, setCmpB]           = useState(currentPeriod())
-  const [cmpResult, setCmpResult] = useState(null)
+  const [cmpA, setCmpA]             = useState(periods6[periods6.length - 2] || periods6[0])
+  const [cmpB, setCmpB]             = useState(currentPeriod())
+  const [cmpResult, setCmpResult]   = useState(null)
   const [cmpLoading, setCmpLoading] = useState(false)
-  const [cmpError, setCmpError]   = useState(null)
+  const [cmpError, setCmpError]     = useState(null)
+
+  const canal = selCanal === 'Todos' ? null : selCanal
 
   const load = useCallback(async () => {
     setLoading(true); setError(null)
     try {
-      const res = await getDashboard(orgId, null, periods6)
-      setTrendData(res.data || [])
+      const [trendRes, bdRes] = await Promise.all([
+        getDashboard(orgId, null, periods6, canal),
+        getChannelBreakdown(orgId, currentPeriod()),
+      ])
+      setTrendData(trendRes.data || [])
+      setBreakdown(bdRes)
     } catch (e) {
       setError(e.message)
     } finally {
       setLoading(false)
     }
-  }, [orgId])
+  }, [orgId, selCanal])
 
   useEffect(() => { load() }, [load])
 
@@ -173,15 +228,32 @@ export default function Dashboard() {
         </div>
       )}
 
-      {/* Selector de período */}
-      <div className="bg-white rounded-2xl border border-slate-200 p-4 space-y-3">
-        <p className="text-xs font-semibold text-slate-500 uppercase tracking-wide">Período</p>
-        <PeriodSelector
-          selectedPeriod={selPeriod}
-          onPeriodChange={setSelPeriod}
-          availablePeriods={periods6}
-          dataByPeriod={dataByPeriod}
-        />
+      {/* Selector de período + canal */}
+      <div className="bg-white rounded-2xl border border-slate-200 p-4 space-y-4">
+        <div className="space-y-2">
+          <p className="text-xs font-semibold text-slate-500 uppercase tracking-wide">Período</p>
+          <PeriodSelector
+            selectedPeriod={selPeriod}
+            onPeriodChange={setSelPeriod}
+            availablePeriods={periods6}
+            dataByPeriod={dataByPeriod}
+          />
+        </div>
+        <div className="space-y-2 border-t border-slate-100 pt-3">
+          <p className="text-xs font-semibold text-slate-500 uppercase tracking-wide">Canal</p>
+          <div className="flex flex-wrap gap-1">
+            {CANALES.map(c => (
+              <button key={c} onClick={() => setSelCanal(c)}
+                className="px-3 py-1.5 rounded-lg text-xs font-medium transition-all capitalize"
+                style={{
+                  backgroundColor: selCanal === c ? '#6366F1' : '#F1F5F9',
+                  color:           selCanal === c ? '#fff'    : '#475569',
+                }}>
+                {c}
+              </button>
+            ))}
+          </div>
+        </div>
       </div>
 
       {/* Métricas del período seleccionado */}
@@ -262,6 +334,11 @@ export default function Dashboard() {
             <NpsBar label="Detractores" count={current.detractors} pct={current.detractors_pct} color="#EF4444" />
           </div>
         </div>
+      )}
+
+      {/* Desglose por canal */}
+      {!loading && breakdown?.channels?.length >= 2 && selCanal === 'Todos' && (
+        <ChannelTable channels={breakdown.channels} />
       )}
 
       {/* Top aspectos */}

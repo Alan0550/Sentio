@@ -5,7 +5,6 @@ Orquesta el análisis de múltiples filas de feedback y calcula el resumen ejecu
 
 import time
 
-from services.text_analyzer import analyze_text
 from services.score_engine  import analyze_feedback
 from services.history       import save_analysis, save_batch_summary
 
@@ -49,8 +48,7 @@ def process_batch(rows: list, org_id: str, batch_id: str) -> dict:
         print(f"[batch] {i+1}/{total} — customer_id={customer_id}")
 
         try:
-            comprehend_result = analyze_text(feedback)
-            result = analyze_feedback(feedback, comprehend_result)
+            result = analyze_feedback(feedback)
 
             result["source"]      = canal
             result["customer_id"] = customer_id

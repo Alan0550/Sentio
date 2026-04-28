@@ -29,9 +29,9 @@ export default function FeedbackForm({ onSubmit, error }) {
   return (
     <div className="max-w-2xl mx-auto">
       <div className="text-center mb-8">
-        <h2 className="text-2xl font-bold text-slate-800">Analizá el feedback de tu cliente</h2>
+        <h2 className="text-2xl font-bold text-slate-800">Demo — Analizá un comentario</h2>
         <p className="text-slate-500 mt-2 text-sm">
-          Pegá una reseña, comentario de encuesta o chat de soporte para obtener un análisis completo con NPS inferido.
+          Probá el analizador con un comentario de ejemplo. Para análisis en volumen, usá Carga CSV.
         </p>
       </div>
 
