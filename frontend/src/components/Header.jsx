@@ -1,15 +1,18 @@
-import { Home, BarChart2, Upload, FlaskConical, AlertTriangle } from 'lucide-react'
+import { Home, BarChart2, Upload, FlaskConical, AlertTriangle, Users } from 'lucide-react'
 
 const NAV = [
   { key: 'home',      label: 'Inicio',    Icon: Home          },
   { key: 'dashboard', label: 'Dashboard', Icon: BarChart2     },
   { key: 'urgents',   label: 'Urgentes',  Icon: AlertTriangle },
+  { key: 'customers', label: 'Clientes',  Icon: Users         },
   { key: 'csv',       label: 'Carga CSV', Icon: Upload        },
   { key: 'analyzer',  label: 'Demo',      Icon: FlaskConical  },
 ]
 
 export default function Header({ view, onChangeView, pendingCount = 0 }) {
-  const activeKey = ['csv', 'csv-result'].includes(view) ? 'csv' : view
+  const activeKey = ['csv', 'csv-result'].includes(view) ? 'csv'
+    : view === 'customer-profile' ? 'customers'
+    : view
 
   return (
     <header className="shadow-sm" style={{ backgroundColor: '#0F172A' }}>

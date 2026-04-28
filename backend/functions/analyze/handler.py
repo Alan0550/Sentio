@@ -27,6 +27,8 @@ from services.aggregator      import (get_period_metrics, get_trend, compare_per
                                       get_home_summary, get_channel_breakdown)
 from services.urgent_manager  import (get_all_urgents, update_urgent,
                                       get_resolution_metrics)
+from services.customer_manager import (get_customer_history, get_customer_summary,
+                                       get_customer_list)
 
 
 HEADERS = {
@@ -75,6 +77,17 @@ def lambda_handler(event, context):
     if path.startswith("/urgents/") and method == "PATCH":
         aid = (event.get("pathParameters") or {}).get("analysis_id") or path.split("/urgents/")[-1]
         return _handle_update_urgent(event, aid)
+
+    if path == "/customers" and method == "GET":
+        return _handle_get_customers(event)
+
+    if path.endswith("/summary") and path.startswith("/customers/") and method == "GET":
+        cid = (event.get("pathParameters") or {}).get("customer_id") or path.split("/customers/")[-1].replace("/summary", "")
+        return _handle_get_customer_summary(event, cid)
+
+    if path.startswith("/customers/") and method == "GET":
+        cid = (event.get("pathParameters") or {}).get("customer_id") or path.split("/customers/")[-1]
+        return _handle_get_customer_history(event, cid)
 
     return _handle_analyze(event)
 
@@ -361,6 +374,31 @@ def _handle_urgent_metrics(event):
 
     data = get_resolution_metrics(org_id, period)
     return {"statusCode": 200, "headers": HEADERS, "body": _dumps(data)}
+
+
+def _handle_get_customers(event):
+    params  = event.get("queryStringParameters") or {}
+    org_id  = params.get("org_id", "default")
+    period  = params.get("period") or None
+    sort_by = params.get("sort_by", "interactions")
+    data    = get_customer_list(org_id, period=period, sort_by=sort_by)
+    return {"statusCode": 200, "headers": HEADERS, "body": _dumps(data)}
+
+
+def _handle_get_customer_history(event, customer_id: str):
+    params = event.get("queryStringParameters") or {}
+    org_id = params.get("org_id", "default")
+    data   = get_customer_history(org_id, customer_id)
+    code   = 200 if data.get("found", False) else 404
+    return {"statusCode": code, "headers": HEADERS, "body": _dumps(data)}
+
+
+def _handle_get_customer_summary(event, customer_id: str):
+    params = event.get("queryStringParameters") or {}
+    org_id = params.get("org_id", "default")
+    data   = get_customer_summary(org_id, customer_id)
+    code   = 200 if data.get("found", False) else 404
+    return {"statusCode": code, "headers": HEADERS, "body": _dumps(data)}
 
 
 # ── Helpers ───────────────────────────────────────────────────────────────────

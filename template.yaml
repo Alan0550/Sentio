@@ -137,6 +137,24 @@ Resources:
             RestApiId: !Ref SentioApi
             Path: /urgents/{analysis_id}
             Method: PATCH
+        GetCustomers:
+          Type: Api
+          Properties:
+            RestApiId: !Ref SentioApi
+            Path: /customers
+            Method: GET
+        GetCustomerSummary:
+          Type: Api
+          Properties:
+            RestApiId: !Ref SentioApi
+            Path: /customers/{customer_id}/summary
+            Method: GET
+        GetCustomerHistory:
+          Type: Api
+          Properties:
+            RestApiId: !Ref SentioApi
+            Path: /customers/{customer_id}
+            Method: GET
         GetDashboard:
           Type: Api
           Properties:

@@ -44,7 +44,7 @@ const FILTERS = [
   { key: 'resuelto',   label: 'Resueltos'    },
 ]
 
-export default function UrgentBoard({ initialOpenId = null, onPendingCountChange }) {
+export default function UrgentBoard({ initialOpenId = null, onPendingCountChange, onNavigateCustomer }) {
   const periods6 = getLast6Months()
   const [orgId, setOrgId]         = useState('default')
   const [period, setPeriod]       = useState(currentPeriod())
@@ -272,6 +272,7 @@ export default function UrgentBoard({ initialOpenId = null, onPendingCountChange
           urgent={openUrgent}
           onClose={() => setOpenUrgent(null)}
           onUpdate={updated => { handleUpdate(updated); setOpenUrgent(null) }}
+          onNavigateCustomer={onNavigateCustomer}
         />
       )}
     </div>

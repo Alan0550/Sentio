@@ -7,6 +7,8 @@ import Dashboard from './components/Dashboard'
 import CsvUploader from './components/CsvUploader'
 import BatchResult from './components/BatchResult'
 import UrgentBoard from './components/UrgentBoard'
+import CustomerSearch from './components/CustomerSearch'
+import CustomerProfile from './components/CustomerProfile'
 import { analyzeFeedback, getUrgents } from './services/api'
 
 export default function App() {
@@ -34,9 +36,7 @@ export default function App() {
   }
 
   async function handleAnalyze(formData) {
-    setLoading(true)
-    setError(null)
-    setResult(null)
+    setLoading(true); setError(null); setResult(null)
     setInputText(formData.input)
     try {
       const data = await analyzeFeedback(formData)
@@ -62,6 +62,20 @@ export default function App() {
           <UrgentBoard
             initialOpenId={viewParams.openUrgentId || null}
             onPendingCountChange={setPendingCount}
+            onNavigateCustomer={cid => navigate('customer-profile', { customerId: cid })}
+          />
+        )}
+
+        {view === 'customers' && (
+          <CustomerSearch onSelectCustomer={cid => navigate('customer-profile', { customerId: cid })} />
+        )}
+
+        {view === 'customer-profile' && (
+          <CustomerProfile
+            customerId={viewParams.customerId}
+            orgId="default"
+            onBack={() => navigate('customers')}
+            onNavigate={navigate}
           />
         )}
 

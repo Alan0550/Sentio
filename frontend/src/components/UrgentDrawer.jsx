@@ -1,7 +1,7 @@
 import { useState, useEffect } from 'react'
-import { X, Save, Loader2, CheckCircle } from 'lucide-react'
+import { X, Save, Loader2, CheckCircle, TrendingUp, TrendingDown, Minus } from 'lucide-react'
 import UrgentBadge from './UrgentBadge'
-import { updateUrgent } from '../services/api'
+import { updateUrgent, getCustomerSummary } from '../services/api'
 
 const NPS_BADGE = {
   promotor:  { color: '#10B981', bg: '#ECFDF5' },
@@ -36,13 +36,14 @@ function timeAgo(iso) {
   return `hace ${Math.floor(diff / 86400)} días`
 }
 
-export default function UrgentDrawer({ urgent, onClose, onUpdate }) {
+export default function UrgentDrawer({ urgent, onClose, onUpdate, onNavigateCustomer }) {
   const [status,   setStatus]   = useState(urgent?.urgent_status || 'pendiente')
   const [assignee, setAssignee] = useState(urgent?.urgent_assignee || '')
-  const [note,     setNote]     = useState(urgent?.urgent_note || '')
-  const [saving,   setSaving]   = useState(false)
-  const [toast,    setToast]    = useState(null)
-  const [saveError, setSaveError] = useState(null)
+  const [note,       setNote]       = useState(urgent?.urgent_note || '')
+  const [saving,     setSaving]     = useState(false)
+  const [toast,      setToast]      = useState(null)
+  const [saveError,  setSaveError]  = useState(null)
+  const [custSummary, setCustSummary] = useState(null)
 
   useEffect(() => {
     if (!urgent) return
@@ -51,6 +52,15 @@ export default function UrgentDrawer({ urgent, onClose, onUpdate }) {
     setNote(urgent.urgent_note || '')
     setSaveError(null)
     setToast(null)
+    setCustSummary(null)
+
+    // Cargar resumen del cliente en background
+    const cid = urgent.customer_id
+    if (cid && cid !== 'null') {
+      getCustomerSummary(cid, urgent.org_id || 'default')
+        .then(s => s.found ? setCustSummary(s) : null)
+        .catch(() => {})
+    }
   }, [urgent?.id])
 
   if (!urgent) return null
@@ -128,6 +138,32 @@ export default function UrgentDrawer({ urgent, onClose, onUpdate }) {
               <X size={18} />
             </button>
           </div>
+
+          {/* Historial del cliente */}
+          {urgent.customer_id && urgent.customer_id !== 'null' && custSummary && (
+            <div className="rounded-xl px-4 py-3 space-y-1"
+              style={{ backgroundColor: '#F8FAFC', border: '1px solid #E2E8F0' }}>
+              {custSummary.total_interactions > 1 ? (
+                <>
+                  <p className="text-xs text-slate-600 font-medium">
+                    📋 Este cliente tiene {custSummary.total_interactions} interacciones registradas
+                  </p>
+                  <p className="text-xs text-slate-400">
+                    Tendencia: {custSummary.trend === 'mejorando' ? '▲ Mejorando' : custSummary.trend === 'empeorando' ? '▼ Empeorando' : '● Estable'}
+                    {' '} | Score actual: {custSummary.last_score}/10
+                  </p>
+                  {onNavigateCustomer && (
+                    <button onClick={() => onNavigateCustomer(urgent.customer_id)}
+                      className="text-xs text-indigo-600 font-medium hover:text-indigo-800 transition-colors">
+                      Ver historial completo →
+                    </button>
+                  )}
+                </>
+              ) : (
+                <p className="text-xs text-slate-500">📋 Primera interacción de este cliente</p>
+              )}
+            </div>
+          )}
 
           {/* Feedback */}
           <div className="space-y-2">

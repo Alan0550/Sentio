@@ -41,6 +41,37 @@ function DeltaBadge({ change, label, invert = false }) {
   )
 }
 
+function UrgentList({ urgents, onNavigate }) {
+  const freq = {}
+  urgents.forEach(u => { if (u.customer_id) freq[u.customer_id] = (freq[u.customer_id] || 0) + 1 })
+  return (
+    <div className="divide-y divide-slate-100">
+      {urgents.map((u, i) => (
+        <div key={i} className="px-5 py-3 space-y-1">
+          <div className="flex items-center gap-2 flex-wrap">
+            <span className="text-xs font-bold text-slate-700">{u.customer_id}</span>
+            <span className="text-xs px-2 py-0.5 rounded-full font-medium"
+              style={{ color: CHURN_COLOR[u.churn_risk] || '#94A3B8', backgroundColor: `${CHURN_COLOR[u.churn_risk] || '#94A3B8'}15` }}>
+              churn {u.churn_risk}
+            </span>
+            {u.customer_id && freq[u.customer_id] > 1 && (
+              <span className="text-xs text-slate-400">{freq[u.customer_id]} interacciones previas</span>
+            )}
+            <span className="text-xs text-slate-400 ml-auto">{timeAgo(u.timestamp)}</span>
+            <button onClick={() => onNavigate('urgents', { openUrgentId: u.id })}
+              className="text-xs font-semibold px-2.5 py-1 rounded-lg transition-colors"
+              style={{ backgroundColor: '#EEF2FF', color: '#6366F1' }}>
+              Gestionar →
+            </button>
+          </div>
+          <p className="text-xs text-slate-600">{u.input_preview}</p>
+          {u.urgency_reason && <p className="text-xs text-red-500 italic">{u.urgency_reason}</p>}
+        </div>
+      ))}
+    </div>
+  )
+}
+
 function SkeletonCard() {
   return (
     <div className="bg-white rounded-2xl border border-slate-200 p-5 animate-pulse space-y-3">
@@ -186,31 +217,7 @@ export default function Home({ onNavigate }) {
                 Requieren atención inmediata ({cur.urgent_count})
               </h3>
             </div>
-            <div className="divide-y divide-slate-100">
-              {data.top_urgent.map((u, i) => (
-                <div key={i} className="px-5 py-3 space-y-1">
-                  <div className="flex items-center gap-2 flex-wrap">
-                    <span className="text-xs font-bold text-slate-700">{u.customer_id}</span>
-                    <span className="text-xs px-2 py-0.5 rounded-full font-medium"
-                      style={{ color: CHURN_COLOR[u.churn_risk] || '#94A3B8', backgroundColor: `${CHURN_COLOR[u.churn_risk] || '#94A3B8'}15` }}>
-                      churn {u.churn_risk}
-                    </span>
-                    <span className="text-xs text-slate-400 ml-auto">{timeAgo(u.timestamp)}</span>
-                    <button
-                      onClick={() => onNavigate('urgents', { openUrgentId: u.id })}
-                      className="text-xs font-semibold px-2.5 py-1 rounded-lg transition-colors"
-                      style={{ backgroundColor: '#EEF2FF', color: '#6366F1' }}
-                    >
-                      Gestionar →
-                    </button>
-                  </div>
-                  <p className="text-xs text-slate-600">{u.input_preview}</p>
-                  {u.urgency_reason && (
-                    <p className="text-xs text-red-500 italic">{u.urgency_reason}</p>
-                  )}
-                </div>
-              ))}
-            </div>
+            <UrgentList urgents={data.top_urgent} onNavigate={onNavigate} />
             <div className="px-5 py-3 border-t border-slate-100">
               <button onClick={() => onNavigate('urgents')}
                 className="text-xs text-indigo-600 font-medium hover:text-indigo-800 transition-colors">

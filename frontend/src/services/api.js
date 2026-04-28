@@ -67,6 +67,28 @@ export async function getBatch(batchId) {
   return response.json()
 }
 
+export async function getCustomers(orgId = 'default', period = null, sortBy = 'interactions') {
+  let url = `${API_URL}/customers?org_id=${encodeURIComponent(orgId)}&sort_by=${sortBy}`
+  if (period) url += `&period=${period}`
+  const response = await fetch(url)
+  if (!response.ok) throw new Error('Error al cargar clientes')
+  return response.json()
+}
+
+export async function getCustomerHistory(customerId, orgId = 'default') {
+  const response = await fetch(`${API_URL}/customers/${encodeURIComponent(customerId)}?org_id=${encodeURIComponent(orgId)}`)
+  if (response.status === 404) return { found: false, customer_id: customerId }
+  if (!response.ok) throw new Error('Error al cargar historial del cliente')
+  return response.json()
+}
+
+export async function getCustomerSummary(customerId, orgId = 'default') {
+  const response = await fetch(`${API_URL}/customers/${encodeURIComponent(customerId)}/summary?org_id=${encodeURIComponent(orgId)}`)
+  if (response.status === 404) return { found: false, customer_id: customerId }
+  if (!response.ok) throw new Error('Error al cargar resumen del cliente')
+  return response.json()
+}
+
 export async function getUrgents(orgId = 'default', period = null, status = null) {
   let url = `${API_URL}/urgents?org_id=${encodeURIComponent(orgId)}`
   if (period) url += `&period=${period}`
