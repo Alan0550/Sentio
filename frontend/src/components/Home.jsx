@@ -138,6 +138,16 @@ export default function Home({ onNavigate }) {
         </div>
       )}
 
+      {/* Métricas de resolución */}
+      {!loading && data?.resolution && data.resolution.pending + data.resolution.in_progress + data.resolution.resolved > 0 && (
+        <div className="flex flex-wrap gap-4 text-xs text-slate-500 px-1">
+          <span>Resolución de urgentes:</span>
+          <span className="font-semibold" style={{ color: '#10B981' }}>{data.resolution.resolution_rate_pct}% resueltos</span>
+          {data.resolution.in_progress > 0 && <span>{data.resolution.in_progress} en gestión</span>}
+          {data.resolution.pending > 0 && <span style={{ color: '#EF4444' }}>{data.resolution.pending} pendientes</span>}
+        </div>
+      )}
+
       {/* Sección 3 — Aspectos críticos */}
       {!loading && data?.critical_aspects?.length > 0 && (
         <div className="bg-white rounded-2xl border border-amber-200 overflow-hidden">
@@ -186,6 +196,13 @@ export default function Home({ onNavigate }) {
                       churn {u.churn_risk}
                     </span>
                     <span className="text-xs text-slate-400 ml-auto">{timeAgo(u.timestamp)}</span>
+                    <button
+                      onClick={() => onNavigate('urgents', { openUrgentId: u.id })}
+                      className="text-xs font-semibold px-2.5 py-1 rounded-lg transition-colors"
+                      style={{ backgroundColor: '#EEF2FF', color: '#6366F1' }}
+                    >
+                      Gestionar →
+                    </button>
                   </div>
                   <p className="text-xs text-slate-600">{u.input_preview}</p>
                   {u.urgency_reason && (
@@ -195,7 +212,7 @@ export default function Home({ onNavigate }) {
               ))}
             </div>
             <div className="px-5 py-3 border-t border-slate-100">
-              <button onClick={() => onNavigate('dashboard')}
+              <button onClick={() => onNavigate('urgents')}
                 className="text-xs text-indigo-600 font-medium hover:text-indigo-800 transition-colors">
                 Ver todos los urgentes →
               </button>

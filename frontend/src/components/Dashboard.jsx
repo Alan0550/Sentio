@@ -3,7 +3,7 @@ import { RefreshCw, AlertTriangle, TrendingDown, Users, BarChart2, GitCompare } 
 import PeriodSelector, { formatPeriod } from './PeriodSelector'
 import TrendChart from './TrendChart'
 import AspectEvolution from './AspectEvolution'
-import { getDashboard, comparePeriods, getChannelBreakdown } from '../services/api'
+import { getDashboard, comparePeriods, getChannelBreakdown, getUrgentMetrics } from '../services/api'
 
 const CANALES = ['Todos', 'encuesta', 'chat', 'reseña', 'email', 'manual', 'csv_upload']
 
@@ -139,9 +139,10 @@ export default function Dashboard() {
   const [selPeriod, setSelPeriod] = useState(currentPeriod())
   const [selCanal, setSelCanal]   = useState('Todos')
   const [trendData, setTrendData] = useState([])
-  const [breakdown, setBreakdown] = useState(null)
-  const [loading, setLoading]     = useState(true)
-  const [error, setError]         = useState(null)
+  const [breakdown, setBreakdown]       = useState(null)
+  const [resMetrics, setResMetrics]     = useState(null)
+  const [loading, setLoading]           = useState(true)
+  const [error, setError]               = useState(null)
 
   // Comparación
   const [cmpA, setCmpA]             = useState(periods6[periods6.length - 2] || periods6[0])
@@ -155,12 +156,14 @@ export default function Dashboard() {
   const load = useCallback(async () => {
     setLoading(true); setError(null)
     try {
-      const [trendRes, bdRes] = await Promise.all([
+      const [trendRes, bdRes, rmRes] = await Promise.all([
         getDashboard(orgId, null, periods6, canal),
         getChannelBreakdown(orgId, currentPeriod()),
+        getUrgentMetrics(orgId, currentPeriod()),
       ])
       setTrendData(trendRes.data || [])
       setBreakdown(bdRes)
+      setResMetrics(rmRes)
     } catch (e) {
       setError(e.message)
     } finally {
@@ -423,6 +426,48 @@ export default function Dashboard() {
           </div>
         )}
       </div>
+
+      {/* Métricas de resolución de urgentes */}
+      <div className="bg-white rounded-2xl border border-slate-200 p-5 space-y-4">
+        <h3 className="text-sm font-semibold text-slate-700">
+          Resolución de urgentes — {formatPeriod(selPeriod)}
+        </h3>
+        {!loading && resMetrics ? (
+          resMetrics.total_urgent === 0 ? (
+            <p className="text-sm text-slate-400">Sin urgentes en este período.</p>
+          ) : (
+            <div className="space-y-3">
+              <div className="flex items-center gap-3">
+                <span className="text-xs text-slate-500 w-32">Tasa de resolución</span>
+                <div className="flex-1 h-3 bg-slate-100 rounded-full overflow-hidden">
+                  <div className="h-full rounded-full transition-all"
+                    style={{ width: `${resMetrics.resolution_rate_pct}%`, backgroundColor: '#10B981' }} />
+                </div>
+                <span className="text-xs font-bold" style={{ color: '#10B981' }}>
+                  {resMetrics.resolution_rate_pct}%
+                </span>
+              </div>
+              <div className="flex flex-wrap gap-6 text-xs text-slate-600">
+                <span>Resueltos: <strong>{resMetrics.resolved} / {resMetrics.total_urgent}</strong></span>
+                {resMetrics.avg_resolution_hours !== null && (
+                  <span>Tiempo promedio: <strong>{resMetrics.avg_resolution_hours} h</strong></span>
+                )}
+                {resMetrics.pending > 0 && (
+                  <span style={{ color: '#EF4444' }}>Pendientes: <strong>{resMetrics.pending}</strong></span>
+                )}
+                {resMetrics.in_progress > 0 && (
+                  <span style={{ color: '#F97316' }}>En gestión: <strong>{resMetrics.in_progress}</strong></span>
+                )}
+              </div>
+            </div>
+          )
+        ) : !loading ? (
+          <p className="text-sm text-slate-400">Sin casos resueltos en este período.</p>
+        ) : (
+          <div className="h-8 bg-slate-100 rounded animate-pulse" />
+        )}
+      </div>
+
     </div>
   )
 }

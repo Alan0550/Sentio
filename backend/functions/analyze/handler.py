@@ -23,15 +23,17 @@ from services.score_engine   import analyze_feedback
 from services.history        import save_analysis, get_recent, get_batch_summary
 from services.csv_processor  import parse_csv
 from services.batch_processor import process_batch
-from services.aggregator     import (get_period_metrics, get_trend, compare_periods,
-                                     get_home_summary, get_channel_breakdown)
+from services.aggregator      import (get_period_metrics, get_trend, compare_periods,
+                                      get_home_summary, get_channel_breakdown)
+from services.urgent_manager  import (get_all_urgents, update_urgent,
+                                      get_resolution_metrics)
 
 
 HEADERS = {
     "Content-Type":                 "application/json",
     "Access-Control-Allow-Origin":  "*",
-    "Access-Control-Allow-Headers": "Content-Type,Content-Type",
-    "Access-Control-Allow-Methods": "POST,GET,OPTIONS",
+    "Access-Control-Allow-Headers": "Content-Type",
+    "Access-Control-Allow-Methods": "POST,GET,PATCH,OPTIONS",
 }
 
 
@@ -63,6 +65,16 @@ def lambda_handler(event, context):
 
     if path == "/home" and method == "GET":
         return _handle_home(event)
+
+    if path == "/urgents/metrics" and method == "GET":
+        return _handle_urgent_metrics(event)
+
+    if path == "/urgents" and method == "GET":
+        return _handle_get_urgents(event)
+
+    if path.startswith("/urgents/") and method == "PATCH":
+        aid = (event.get("pathParameters") or {}).get("analysis_id") or path.split("/urgents/")[-1]
+        return _handle_update_urgent(event, aid)
 
     return _handle_analyze(event)
 
@@ -295,6 +307,60 @@ def _handle_dashboard_compare(event):
         "statusCode": 200, "headers": HEADERS,
         "body": _dumps(data),
     }
+
+
+def _handle_get_urgents(event):
+    params = event.get("queryStringParameters") or {}
+    org_id = params.get("org_id", "default")
+    period = params.get("period") or None
+    status = params.get("status") or None
+
+    items   = get_all_urgents(org_id, period=period, status=status)
+    pending = sum(1 for i in items if i.get("urgent_status", "pendiente") == "pendiente")
+    in_prog = sum(1 for i in items if i.get("urgent_status") == "en_gestion")
+    resolved = sum(1 for i in items if i.get("urgent_status") == "resuelto")
+
+    return {
+        "statusCode": 200, "headers": HEADERS,
+        "body": _dumps({
+            "org_id":     org_id,
+            "total":      len(items),
+            "pending":    pending,
+            "in_progress": in_prog,
+            "resolved":   resolved,
+            "items":      items,
+        }),
+    }
+
+
+def _handle_update_urgent(event, analysis_id: str):
+    try:
+        body = json.loads(event.get("body") or "{}")
+    except json.JSONDecodeError:
+        return _error(400, "Body inválido.")
+
+    org_id  = body.pop("org_id", "default")
+    updates = body  # el resto son los campos a actualizar
+
+    result = update_urgent(analysis_id, org_id, updates)
+
+    if "error" in result:
+        code = 404 if result["error"] == "not_found" else \
+               403 if result["error"] == "forbidden" else 400
+        return _error(code, result["message"])
+
+    return {"statusCode": 200, "headers": HEADERS, "body": _dumps(result)}
+
+
+def _handle_urgent_metrics(event):
+    from datetime import datetime, timezone
+    params = event.get("queryStringParameters") or {}
+    org_id = params.get("org_id", "default")
+    now    = datetime.now(timezone.utc)
+    period = params.get("period") or now.strftime("%Y-%m")
+
+    data = get_resolution_metrics(org_id, period)
+    return {"statusCode": 200, "headers": HEADERS, "body": _dumps(data)}
 
 
 # ── Helpers ───────────────────────────────────────────────────────────────────

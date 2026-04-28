@@ -12,7 +12,7 @@ Globals:
         STAGE: !Ref Stage
   Api:
     Cors:
-      AllowMethods: "'POST,GET,OPTIONS'"
+      AllowMethods: "'POST,GET,PATCH,OPTIONS'"
       AllowHeaders: "'Content-Type'"
       AllowOrigin: "'*'"
 
@@ -34,7 +34,7 @@ Resources:
         - multipart/form-data
         - application/octet-stream
       Cors:
-        AllowMethods: "'POST,GET,OPTIONS'"
+        AllowMethods: "'POST,GET,PATCH,OPTIONS'"
         AllowHeaders: "'Content-Type'"
         AllowOrigin: "'*'"
 
@@ -76,6 +76,7 @@ Resources:
                 - dynamodb:GetItem
                 - dynamodb:Query
                 - dynamodb:Scan
+                - dynamodb:UpdateItem
               Resource: !GetAtt AnalysisTable.Arn
       Environment:
         Variables:
@@ -118,6 +119,24 @@ Resources:
             RestApiId: !Ref SentioApi
             Path: /home
             Method: GET
+        GetUrgentMetrics:
+          Type: Api
+          Properties:
+            RestApiId: !Ref SentioApi
+            Path: /urgents/metrics
+            Method: GET
+        GetUrgents:
+          Type: Api
+          Properties:
+            RestApiId: !Ref SentioApi
+            Path: /urgents
+            Method: GET
+        UpdateUrgent:
+          Type: Api
+          Properties:
+            RestApiId: !Ref SentioApi
+            Path: /urgents/{analysis_id}
+            Method: PATCH
         GetDashboard:
           Type: Api
           Properties:

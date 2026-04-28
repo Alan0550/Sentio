@@ -217,6 +217,20 @@ def get_home_summary(org_id: str) -> dict:
     critical_aspects.sort(key=lambda x: x["negative_pct"], reverse=True)
     critical_aspects = critical_aspects[:5]
 
+    # Métricas de resolución del período actual
+    resolution = {"pending": 0, "in_progress": 0, "resolved": 0, "resolution_rate_pct": 0}
+    try:
+        from services.urgent_manager import get_resolution_metrics as _res_metrics
+        rm = _res_metrics(org_id, cur_p)
+        resolution = {
+            "pending":             rm.get("pending", 0),
+            "in_progress":         rm.get("in_progress", 0),
+            "resolved":            rm.get("resolved", 0),
+            "resolution_rate_pct": rm.get("resolution_rate_pct", 0),
+        }
+    except Exception as e:
+        print(f"[aggregator] resolution metrics error: {e}")
+
     return {
         "org_id":          org_id,
         "current_period":  cur_p,
@@ -232,6 +246,7 @@ def get_home_summary(org_id: str) -> dict:
         "top_urgent":        top_urgent,
         "critical_aspects":  critical_aspects,
         "has_data":          has_data,
+        "resolution":        resolution,
     }
 
 

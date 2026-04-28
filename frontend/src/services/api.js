@@ -67,6 +67,33 @@ export async function getBatch(batchId) {
   return response.json()
 }
 
+export async function getUrgents(orgId = 'default', period = null, status = null) {
+  let url = `${API_URL}/urgents?org_id=${encodeURIComponent(orgId)}`
+  if (period) url += `&period=${period}`
+  if (status) url += `&status=${status}`
+  const response = await fetch(url)
+  if (!response.ok) throw new Error('Error al cargar urgentes')
+  return response.json()
+}
+
+export async function updateUrgent(analysisId, orgId = 'default', updates) {
+  const response = await fetch(`${API_URL}/urgents/${analysisId}`, {
+    method: 'PATCH',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ org_id: orgId, ...updates }),
+  })
+  if (!response.ok) throw new Error('Error al actualizar el urgente')
+  return response.json()
+}
+
+export async function getUrgentMetrics(orgId = 'default', period = null) {
+  let url = `${API_URL}/urgents/metrics?org_id=${encodeURIComponent(orgId)}`
+  if (period) url += `&period=${period}`
+  const response = await fetch(url)
+  if (!response.ok) throw new Error('Error al cargar métricas de resolución')
+  return response.json()
+}
+
 export async function getHomeSummary(orgId = 'default') {
   const response = await fetch(`${API_URL}/home?org_id=${encodeURIComponent(orgId)}`)
   if (!response.ok) throw new Error('Error al cargar el resumen')
